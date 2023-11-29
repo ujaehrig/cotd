@@ -2,3 +2,4 @@ venv/
 env.incl
 setup-user.sql
 config.ini
+user.db
