@@ -53,7 +53,7 @@ def trigger_slack(mail):
         if response.status_code == 200:
             logging.info("Chosen Catcher: %s", mail)
         else:
-            logging.warn("Webhook returned: %d (%s)", response.status_code, response.json)
+            logging.warn("Webhook returned: %d (%s)", response.status_code, response.content)
     except requests.exceptions.RequestException as e:
         logging.error('Failed to trigger Slack notification: %s', e)
 
