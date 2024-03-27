@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
 import configparser
-import sqlite3
 import json
 import logging
-import requests
+import sqlite3
 
+import requests
 
 # Configure logging
 logging.basicConfig(
@@ -41,7 +41,9 @@ def trigger_slack(mail):
     :return: None
     :rtype: None
 
-    This method triggers a Slack notification for the specified user using their email address. It sends a POST request to the configured Slack webhook with the email address as the payload.
+    This method triggers a Slack notification for the specified user using
+     their email address. It sends a POST request to the configured Slack
+     webhook with the email address as the payload.
 
     Example usage:
 
@@ -49,7 +51,8 @@ def trigger_slack(mail):
     trigger_slack('user@example.com')
     ```
 
-    Note: This method requires the `config` object to be properly configured with the Slack webhook URL.
+    Note: This method requires the `config` object to be properly configured
+    with the Slack webhook URL.
     """
     try:
         data = {"uid": mail}
@@ -84,7 +87,7 @@ def find_next_catcher():
 
     cur.execute(
         """
-        select mail 
+        select mail
           from user
          where last_chosen = date()
     """
@@ -94,8 +97,8 @@ def find_next_catcher():
     if result is None:
         cur.execute(
             """
-            select mail 
-                from user 
+            select mail
+                from user
             where weekdays like strftime('%%%w%%','now')
                 and ((vacation_start is null or vacation_end is null) 
                     or (date() < vacation_start or date() > vacation_end))
