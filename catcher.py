@@ -52,8 +52,8 @@ def trigger_slack(mail):
         response = requests.post(config.get('slack', 'webhook'), headers=headers, data=json.dumps(data), timeout=1)
         if response.status_code == 200:
             logging.info("Chosen Catcher: %s", mail)
-        else:   
-            logging.warn("Webhook returned: %d", response.status_code)
+        else:
+            logging.warn("Webhook returned: %d (%s)", response.status_code, response.json)
     except requests.exceptions.RequestException as e:
         logging.error('Failed to trigger Slack notification: %s', e)
 
