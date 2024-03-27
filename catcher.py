@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
 import configparser
-import json
-import requests
 import sqlite3
+import json
 import logging
-from http.client import HTTPConnection
+import requests
 
 
 # Configure logging
@@ -112,14 +111,6 @@ def find_next_catcher():
 
     conn.close()
     return None if result is None else result[0]
-
-
-def enable_debug():
-    HTTPConnection.debuglevel = 1
-    logging.getLogger().setLevel(logging.DEBUG)
-    requests_log = logging.getLogger("requests.packages.urllib3")
-    requests_log.setLevel(logging.DEBUG)
-    requests_log.propagate = True
 
 
 def main():
