@@ -2,15 +2,18 @@
 
 import configparser
 import json
-import requests
-import sqlite3
 import logging
+import sqlite3
+
+import requests
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 config = configparser.ConfigParser()
-config.read('config.ini')
+config.read("config.ini")
 
 
 def is_holiday():
@@ -20,12 +23,14 @@ def is_holiday():
     :return: True if today is a public holiday, False otherwise
     """
     try:
-        response = requests.get('https://date.nager.at/Api/v2/IsTodayPublicHoliday/DE', timeout=1)
+        response = requests.get(
+            "https://date.nager.at/Api/v2/IsTodayPublicHoliday/DE", timeout=1
+        )
         if response.status_code == 200:
-            logging.info('Holiday detected')
+            logging.info("Holiday detected")
         return response.status_code == 200
     except requests.exceptions.RequestException as e:
-        logging.error('Failed to check holiday status: %s', e)
+        logging.error("Failed to check holiday status: %s", e)
         return False
 
 
@@ -36,7 +41,9 @@ def trigger_slack(mail):
     :return: None
     :rtype: None
 
-    This method triggers a Slack notification for the specified user using their email address. It sends a POST request to the configured Slack webhook with the email address as the payload.
+    This method triggers a Slack notification for the specified user using
+     their email address. It sends a POST request to the configured Slack
+     webhook with the email address as the payload.
 
     Example usage:
 
@@ -44,18 +51,27 @@ def trigger_slack(mail):
     trigger_slack('user@example.com')
     ```
 
-    Note: This method requires the `config` object to be properly configured with the Slack webhook URL.
+    Note: This method requires the `config` object to be properly configured
+    with the Slack webhook URL.
     """
     try:
-        data = {'uid': mail}
-        headers = {'Content-type': 'application/json'}
-        response = requests.post(config.get('slack', 'webhook'), headers=headers, data=json.dumps(data), timeout=1)
+        data = {"uid": mail}
+        headers = {"Content-type": "application/json"}
+        response = requests.post(
+            config.get("slack", "webhook"),
+            headers=headers,
+            data=json.dumps(data),
+            timeout=1,
+        )
         if response.status_code == 200:
             logging.info("Chosen Catcher: %s", mail)
         else:
-            logging.warn("Webhook returned: %d (%s)", response.status_code, response.json)
+            logging.warn(
+                "Webhook returned: %d (%s)", response.status_code, response.content
+            )
     except requests.exceptions.RequestException as e:
-        logging.error('Failed to trigger Slack notification: %s', e)
+        logging.error("Failed to trigger Slack notification: %s", e)
+
 
 def find_next_catcher():
     """
@@ -69,23 +85,27 @@ def find_next_catcher():
     conn = sqlite3.connect("user.db")
     cur = conn.cursor()
 
-    cur.execute("""
-        select mail 
+    cur.execute(
+        """
+        select mail
           from user
          where last_chosen = date()
-    """)
+    """
+    )
 
     result = cur.fetchone()
     if result is None:
-        cur.execute("""
-            select mail 
-                from user 
+        cur.execute(
+            """
+            select mail
+                from user
             where weekdays like strftime('%%%w%%','now')
                 and ((vacation_start is null or vacation_end is null) 
                     or (date() < vacation_start or date() > vacation_end))
             order by last_chosen asc
             limit 1
-        """)
+        """
+        )
 
         result = cur.fetchone()
         if result is not None:
