@@ -72,19 +72,19 @@ def is_holiday() -> bool:
         return False
 
 
-def trigger_slack(mail: str, max_retries: int = 3, retry_delay: int = 2) -> None:
+def trigger_slack(mail: str, max_retries: int = 3, initial_retry_delay: int = 2) -> None:
     """
     :param mail: The email address of the user to be notified on Slack.
     :type mail: str
     :param max_retries: Maximum number of retry attempts (default: 3)
     :type max_retries: int
-    :param retry_delay: Delay between retries in seconds (default: 2)
-    :type retry_delay: int
+    :param initial_retry_delay: Initial delay between retries in seconds (default: 2)
+    :type initial_retry_delay: int
     :return: None
     :rtype: None
 
     This method triggers a Slack notification for the specified user using their email address. It sends a POST request to the configured Slack webhook with the email address as the payload.
-    If the request times out, it will retry up to max_retries times.
+    If the request times out or returns a server error (5xx), it will retry up to max_retries times with an increasing delay.
 
     Example usage:
 
@@ -107,25 +107,36 @@ def trigger_slack(mail: str, max_retries: int = 3, retry_delay: int = 2) -> None
         return
     
     for attempt in range(max_retries):
+        # Calculate exponential backoff delay
+        retry_delay = initial_retry_delay * (2 ** attempt)
+        
         try:
             response = requests.post(webhook_url, headers=headers, data=json.dumps(data), timeout=SLACK_TIMEOUT)
             if response.status_code == 200:
                 logging.info("Chosen Catcher: %s", mail)
                 return
+            elif 500 <= response.status_code < 600:
+                # Retry on server errors (5xx)
+                retry_num = attempt + 1
+                if retry_num < max_retries:
+                    logging.warning(f"Server error {response.status_code}. Retrying ({retry_num}/{max_retries}) in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                else:
+                    logging.error(f"Slack notification failed after {max_retries} attempts: Server error {response.status_code}")
             else:
                 logging.warning("Webhook returned: %d (%s)", response.status_code, response.text)
-                # Don't retry for non-timeout errors that returned a status code
+                # Don't retry for other non-5xx errors
                 return
         except requests.exceptions.Timeout:
             retry_num = attempt + 1
             if retry_num < max_retries:
-                logging.warning(f"Slack notification timed out. Retrying ({retry_num}/{max_retries})...")
+                logging.warning(f"Slack notification timed out. Retrying ({retry_num}/{max_retries}) in {retry_delay} seconds...")
                 time.sleep(retry_delay)
             else:
-                logging.error(f"Slack notification failed after {max_retries} attempts")
+                logging.error(f"Slack notification failed after {max_retries} attempts: Timeout")
         except requests.exceptions.RequestException as e:
             logging.error('Failed to trigger Slack notification: %s', e)
-            return  # Don't retry for non-timeout errors
+            return  # Don't retry for other non-timeout errors
 
 def find_next_catcher() -> Optional[str]:
     """
