@@ -123,7 +123,7 @@ def list_vacations(user_identifier=None):
                     SELECT v.id, u.mail, v.start_date, v.end_date
                     FROM vacation v
                     JOIN user u ON v.user_id = u.id
-                    ORDER BY u.mail, v.start_date
+                    ORDER BY v.start_date, u.mail
                 """)
 
             vacations = cursor.fetchall()
