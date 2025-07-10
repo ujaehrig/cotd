@@ -38,6 +38,24 @@ def validate_date(date_str: str) -> str:
         sys.exit(1)
 
 
+def get_user_id_by_email(email: str) -> int:
+    """Get user ID by email address."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM user WHERE mail = ?", (email,))
+            user = cursor.fetchone()
+            
+            if not user:
+                logging.error(f"User with email '{email}' not found.")
+                sys.exit(1)
+            
+            return user['id']
+    except sqlite3.Error as e:
+        logging.error(f"Error looking up user: {e}")
+        sys.exit(1)
+
+
 def list_users():
     """List all users in the database."""
     try:
@@ -66,19 +84,27 @@ def list_users():
         sys.exit(1)
 
 
-def list_vacations(user_id=None):
-    """List all vacation periods, optionally filtered by user ID."""
+def list_vacations(user_identifier=None):
+    """List all vacation periods, optionally filtered by user ID or email."""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
 
-            if user_id:
-                # Check if user exists
-                cursor.execute("SELECT mail FROM user WHERE id = ?", (user_id,))
-                user = cursor.fetchone()
-                if not user:
-                    logging.error(f"User with ID {user_id} not found.")
-                    sys.exit(1)
+            if user_identifier:
+                # Check if it's a numeric user ID or email
+                if isinstance(user_identifier, int) or user_identifier.isdigit():
+                    user_id = int(user_identifier)
+                    # Check if user exists
+                    cursor.execute("SELECT mail FROM user WHERE id = ?", (user_id,))
+                    user = cursor.fetchone()
+                    if not user:
+                        logging.error(f"User with ID {user_id} not found.")
+                        sys.exit(1)
+                else:
+                    # It's an email address
+                    user_id = get_user_id_by_email(user_identifier)
+                    cursor.execute("SELECT mail FROM user WHERE id = ?", (user_id,))
+                    user = cursor.fetchone()
 
                 print(f"\nVacation periods for user: {user['mail']}")
                 cursor.execute(
@@ -119,12 +145,20 @@ def list_vacations(user_id=None):
         sys.exit(1)
 
 
-def add_vacation(user_id, start_date, end_date=None):
+def add_vacation(user_identifier, start_date, end_date=None):
     """
     Add a new vacation period for a user.
     
+    user_identifier can be either a user ID (int) or email address (str).
     If end_date is not provided, it will be set to the same as start_date (single day vacation).
     """
+    # Resolve user identifier to user ID
+    if isinstance(user_identifier, int) or (isinstance(user_identifier, str) and user_identifier.isdigit()):
+        user_id = int(user_identifier)
+    else:
+        # It's an email address
+        user_id = get_user_id_by_email(user_identifier)
+    
     # Validate start date
     start = validate_date(start_date)
     
@@ -145,7 +179,7 @@ def add_vacation(user_id, start_date, end_date=None):
         with get_db_connection() as conn:
             cursor = conn.cursor()
 
-            # Check if user exists
+            # Check if user exists and get email
             cursor.execute("SELECT mail FROM user WHERE id = ?", (user_id,))
             user = cursor.fetchone()
             if not user:
@@ -222,12 +256,12 @@ def main():
         "list-vacations", help="List vacation periods"
     )
     list_vacations_parser.add_argument(
-        "-u", "--user-id", type=int, help="Filter by user ID"
+        "-u", "--user", help="Filter by user ID or email address"
     )
 
     # Add vacation command
     add_vacation_parser = subparsers.add_parser("add", help="Add a new vacation period")
-    add_vacation_parser.add_argument("user_id", type=int, help="User ID")
+    add_vacation_parser.add_argument("user", help="User ID or email address")
     add_vacation_parser.add_argument("start_date", help="Start date (YYYY-MM-DD)")
     add_vacation_parser.add_argument("end_date", help="End date (YYYY-MM-DD)", nargs='?', default=None)
 
@@ -244,9 +278,9 @@ def main():
     if args.command == "list-users":
         list_users()
     elif args.command == "list-vacations":
-        list_vacations(args.user_id)
+        list_vacations(args.user)
     elif args.command == "add":
-        add_vacation(args.user_id, args.start_date, args.end_date)
+        add_vacation(args.user, args.start_date, args.end_date)
     elif args.command == "delete":
         delete_vacation(args.vacation_id)
     else:

@@ -50,20 +50,25 @@ python manage_vacations.py list-vacations
 
 ### List vacation periods for a specific user
 ```
-python manage_vacations.py list-vacations --user-id 1
+python manage_vacations.py list-vacations --user john@example.com
+# or still works with user ID
+python manage_vacations.py list-vacations --user 1
 ```
 
 ### Add a vacation period
 ```
-python manage_vacations.py add <user_id> <start_date> [<end_date>]
+python manage_vacations.py add <email_or_user_id> <start_date> [<end_date>]
 ```
 Examples:
 ```
-# Add a vacation period
-python manage_vacations.py add 1 2025-07-15 2025-07-30
+# Add a vacation period using email
+python manage_vacations.py add john@example.com 2025-07-15 2025-07-30
 
-# Add a single day vacation (end_date is optional)
-python manage_vacations.py add 1 2025-07-15
+# Add a single day vacation using email (end_date is optional)
+python manage_vacations.py add john@example.com 2025-07-15
+
+# Still works with user ID
+python manage_vacations.py add 1 2025-07-15 2025-07-30
 ```
 
 ### Delete a vacation period
