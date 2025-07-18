@@ -5,3 +5,6 @@ config.ini
 user.db
 .env
 .aider*
+__pycache__
+sent_emails/
+
