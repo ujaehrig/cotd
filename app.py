@@ -53,6 +53,12 @@ if log_file:
 
 logging.basicConfig(**logging_config)
 
+# Add custom Jinja2 filter for strptime
+@app.template_filter('strptime')
+def strptime_filter(date_string, format_string):
+    """Convert date string to datetime object"""
+    return datetime.strptime(date_string, format_string)
+
 class User(UserMixin):
     def __init__(self, id, mail, weekdays, last_chosen, password_reset_required=False):
         self.id = str(id)
@@ -150,14 +156,14 @@ def my_vacations():
                 FROM vacation v
                 WHERE v.user_id = ?
                 ORDER BY v.start_date
-            """, (current_user.id,))
+            """, (int(current_user.id),))
             
             vacations_data = cursor.fetchall()
             
-        return render_template('my_vacations.html', vacations=vacations_data)
+        return render_template('my_vacations.html', vacations=vacations_data, today_date=datetime.now().strftime('%Y-%m-%d'))
     except Exception as e:
         flash(f'Error loading vacations: {str(e)}', 'error')
-        return render_template('my_vacations.html', vacations=[])
+        return render_template('my_vacations.html', vacations=[], today_date=datetime.now().strftime('%Y-%m-%d'))
 
 @app.route('/add_vacation', methods=['GET', 'POST'])
 @login_required
@@ -171,7 +177,7 @@ def add_vacation():
                 end_date = None
             
             # Use current user's ID instead of selecting from dropdown
-            add_vacation_db(current_user.id, start_date, end_date)
+            add_vacation_db(int(current_user.id), start_date, end_date)
             flash('Vacation period added successfully!', 'success')
             return redirect(url_for('my_vacations'))
         except Exception as e:

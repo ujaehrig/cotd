@@ -45,7 +45,7 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% set today = moment().format('YYYY-MM-DD') %}
+                                {% set today = today_date %}
                                 {% if vacation.end_date < today %}
                                     <span class="badge bg-secondary">Past</span>
                                 {% elif vacation.start_date <= today and vacation.end_date >= today %}
