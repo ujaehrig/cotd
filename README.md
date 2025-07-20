@@ -10,6 +10,23 @@ The script will also take vacation times and holidays into consideration.
 
 ## Installation
 
+### Option 1: Using uv with PEP 723 (Recommended)
+
+The application now supports PEP 723 script metadata, allowing uv to automatically manage dependencies:
+
+```bash
+# Run the Flask web application
+uv run app.py
+
+# Test webhook functionality
+uv run test_webhooks.py
+
+# Run the catcher script
+uv run catcher.py
+```
+
+### Option 2: Traditional Installation
+
 1. Run the script setup.sh. This will setup the database schema and a cronjob to run the catcher.py script every work-day at 7:30.
 2. If you're upgrading from a previous version, run `python migrate_vacations.py` to update the database schema for multiple vacation periods.
 

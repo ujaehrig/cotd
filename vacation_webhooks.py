@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#     "requests>=2.25.0",
+#     "python-dotenv>=1.0.0"
+# ]
+# ///
 
 import os
 import json

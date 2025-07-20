@@ -1,4 +1,14 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#     "flask>=2.3.0",
+#     "flask-login>=0.6.0",
+#     "werkzeug>=2.3.0",
+#     "requests>=2.25.0",
+#     "python-dotenv>=1.0.0"
+# ]
+# ///
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
