@@ -6,12 +6,12 @@
                 aria-label="Close"></button>
     </div>
     <div class="card-body">
-        <form hx-post="{{ url_for('add_vacation') }}"
+        <form id="vacation-form"
+              hx-post="{{ url_for('add_vacation') }}"
               hx-target="#vacation-table"
               hx-swap="innerHTML"
               hx-on::after-request="if(event.detail.successful) { document.getElementById('vacation-form-container').innerHTML = ''; showSuccessMessage('Vacation period added successfully!'); }"
-              hx-on::response-error="handleFormError(event)"
-              onsubmit="return validateFormBeforeSubmit(event)">
+              hx-on::response-error="handleFormError(event)">
             
             <!-- Error message container -->
             <div id="form-error-container"></div>
@@ -50,7 +50,7 @@
                         onclick="document.getElementById('vacation-form-container').innerHTML = ''">
                     <i class="fas fa-times me-1"></i>Cancel
                 </button>
-                <button type="submit" class="btn btn-success">
+                <button type="button" class="btn btn-success" onclick="validateAndSubmit()">
                     <i class="fas fa-plus me-1"></i>Add Vacation
                 </button>
             </div>
@@ -59,7 +59,96 @@
 </div>
 
 <script>
-// Validate form before submission to prevent server requests with invalid data
+// Validate and submit - only trigger HTMX request if validation passes
+function validateAndSubmit() {
+    const today = new Date().toISOString().split('T')[0];
+    const startDateInput = document.getElementById('start_date');
+    const endDateInput = document.getElementById('end_date');
+    const startDate = startDateInput.value;
+    const endDate = endDateInput.value;
+    
+    // Clear any previous error messages
+    const errorContainer = document.getElementById('form-error-container');
+    if (errorContainer) {
+        errorContainer.innerHTML = '';
+    }
+    
+    // Validate start date
+    if (!startDate) {
+        showFormError('Start date is required.');
+        return; // Don't submit
+    }
+    
+    if (startDate < today) {
+        showFormError('Start date cannot be in the past. Please select today or a future date.');
+        return; // Don't submit
+    }
+    
+    // Validate end date if provided
+    if (endDate) {
+        if (endDate < today) {
+            showFormError('End date cannot be in the past. Please select today or a future date.');
+            return; // Don't submit
+        }
+        
+        if (endDate < startDate) {
+            showFormError('End date cannot be before start date.');
+            return; // Don't submit
+        }
+    }
+    
+    // All validation passed - trigger HTMX request manually
+    const form = document.getElementById('vacation-form');
+    htmx.trigger(form, 'submit');
+}
+
+// Validate before HTMX request to prevent server requests with invalid data
+function validateBeforeHTMXRequest(event) {
+    const today = new Date().toISOString().split('T')[0];
+    const startDateInput = document.getElementById('start_date');
+    const endDateInput = document.getElementById('end_date');
+    const startDate = startDateInput.value;
+    const endDate = endDateInput.value;
+    
+    // Clear any previous error messages
+    const errorContainer = document.getElementById('form-error-container');
+    if (errorContainer) {
+        errorContainer.innerHTML = '';
+    }
+    
+    // Validate start date
+    if (!startDate) {
+        showFormError('Start date is required.');
+        event.preventDefault(); // Prevent HTMX request
+        return false;
+    }
+    
+    if (startDate < today) {
+        showFormError('Start date cannot be in the past. Please select today or a future date.');
+        event.preventDefault(); // Prevent HTMX request
+        return false;
+    }
+    
+    // Validate end date if provided
+    if (endDate) {
+        if (endDate < today) {
+            showFormError('End date cannot be in the past. Please select today or a future date.');
+            event.preventDefault(); // Prevent HTMX request
+            return false;
+        }
+        
+        if (endDate < startDate) {
+            showFormError('End date cannot be before start date.');
+            event.preventDefault(); // Prevent HTMX request
+            return false;
+        }
+    }
+    
+    // All validation passed, allow HTMX request
+    return true;
+}
+
+// Validate form before submission to prevent server requests with invalid data (fallback for non-HTMX)
 function validateFormBeforeSubmit(event) {
     const today = new Date().toISOString().split('T')[0];
     const startDateInput = document.getElementById('start_date');
