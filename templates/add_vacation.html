@@ -153,6 +153,9 @@ function validateFormBeforeSubmit(event) {
         }
     }
     
+    // Note: Server-side validation will check for duplicates and overlaps
+    // Client-side overlap checking would require loading existing vacations via AJAX
+    
     // All validation passed, allow form submission
     return true;
 }

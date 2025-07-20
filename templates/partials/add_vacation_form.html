@@ -97,9 +97,72 @@ function validateAndSubmit() {
         }
     }
     
+    // Check for overlapping vacations (client-side check)
+    if (checkForOverlaps(startDate, endDate || startDate)) {
+        return; // Don't submit if overlaps found
+    }
+    
     // All validation passed - trigger HTMX request manually
     const form = document.getElementById('vacation-form');
     htmx.trigger(form, 'submit');
+}
+
+// Check for overlapping vacations on the client side
+function checkForOverlaps(newStartDate, newEndDate) {
+    // Get existing vacation dates from the vacation table
+    const vacationRows = document.querySelectorAll('#vacation-table tbody tr');
+    const existingVacations = [];
+    
+    vacationRows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 2) {
+            const dateText = cells[1].textContent.trim();
+            
+            // Parse date range (could be "2025-01-01" or "2025-01-01 - 2025-01-05")
+            if (dateText.includes(' - ')) {
+                const [start, end] = dateText.split(' - ');
+                existingVacations.push({
+                    start: start.trim(),
+                    end: end.trim()
+                });
+            } else {
+                // Single day vacation
+                existingVacations.push({
+                    start: dateText,
+                    end: dateText
+                });
+            }
+        }
+    });
+    
+    // Check for exact duplicates
+    for (const vacation of existingVacations) {
+        if (vacation.start === newStartDate && vacation.end === newEndDate) {
+            if (newStartDate === newEndDate) {
+                showFormError(`You already have a vacation on ${newStartDate}`);
+            } else {
+                showFormError(`You already have a vacation from ${newStartDate} to ${newEndDate}`);
+            }
+            return true;
+        }
+    }
+    
+    // Check for overlaps
+    for (const vacation of existingVacations) {
+        // Two date ranges overlap if: start1 <= end2 AND start2 <= end1
+        if (newStartDate <= vacation.end && vacation.start <= newEndDate) {
+            let overlapMessage;
+            if (vacation.start === vacation.end) {
+                overlapMessage = `This vacation overlaps with your existing vacation: ${vacation.start}`;
+            } else {
+                overlapMessage = `This vacation overlaps with your existing vacation: ${vacation.start} to ${vacation.end}`;
+            }
+            showFormError(overlapMessage);
+            return true;
+        }
+    }
+    
+    return false; // No overlaps found
 }
 
 // Validate before HTMX request to prevent server requests with invalid data

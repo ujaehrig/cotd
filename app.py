@@ -180,6 +180,99 @@ def is_htmx_request() -> bool:
     return bool(request.headers.get("HX-Request"))
 
 
+def check_vacation_overlap(user_id: int, start_date: str, end_date: str) -> tuple[bool, str]:
+    """
+    Check if a vacation period overlaps with existing vacations for a user.
+    
+    Args:
+        user_id: ID of the user
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        
+    Returns:
+        Tuple of (has_overlap, error_message)
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Check for overlapping vacations
+            # Two date ranges overlap if: start1 <= end2 AND start2 <= end1
+            cursor.execute("""
+                SELECT start_date, end_date 
+                FROM vacation 
+                WHERE user_id = ? 
+                AND (
+                    (start_date <= ? AND end_date >= ?) OR  -- New vacation starts during existing
+                    (start_date <= ? AND end_date >= ?) OR  -- New vacation ends during existing
+                    (start_date >= ? AND end_date <= ?)     -- New vacation contains existing
+                )
+            """, (user_id, end_date, start_date, end_date, start_date, start_date, end_date))
+            
+            overlapping_vacations = cursor.fetchall()
+            
+            if overlapping_vacations:
+                # Format the overlapping vacation dates for the error message
+                overlap_dates = []
+                for vacation in overlapping_vacations:
+                    if vacation['start_date'] == vacation['end_date']:
+                        overlap_dates.append(vacation['start_date'])
+                    else:
+                        overlap_dates.append(f"{vacation['start_date']} to {vacation['end_date']}")
+                
+                if len(overlap_dates) == 1:
+                    error_msg = f"This vacation overlaps with your existing vacation: {overlap_dates[0]}"
+                else:
+                    error_msg = f"This vacation overlaps with your existing vacations: {', '.join(overlap_dates)}"
+                
+                return True, error_msg
+            
+            return False, ""
+            
+    except Exception as e:
+        logging.error(f"Error checking vacation overlap for user {user_id}: {e}")
+        return True, "Error checking for vacation conflicts. Please try again."
+
+
+def check_duplicate_vacation(user_id: int, start_date: str, end_date: str) -> tuple[bool, str]:
+    """
+    Check if a vacation period is an exact duplicate of an existing vacation.
+    
+    Args:
+        user_id: ID of the user
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        
+    Returns:
+        Tuple of (is_duplicate, error_message)
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Check for exact duplicate
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM vacation 
+                WHERE user_id = ? AND start_date = ? AND end_date = ?
+            """, (user_id, start_date, end_date))
+            
+            result = cursor.fetchone()
+            
+            if result['count'] > 0:
+                if start_date == end_date:
+                    error_msg = f"You already have a vacation on {start_date}"
+                else:
+                    error_msg = f"You already have a vacation from {start_date} to {end_date}"
+                return True, error_msg
+            
+            return False, ""
+            
+    except Exception as e:
+        logging.error(f"Error checking duplicate vacation for user {user_id}: {e}")
+        return True, "Error checking for duplicate vacations. Please try again."
+
+
 def get_today_date_string() -> str:
     """Get today's date as a string in YYYY-MM-DD format"""
     return datetime.now().strftime("%Y-%m-%d")
@@ -394,6 +487,30 @@ def add_vacation():
                         return handle_htmx_error(error_msg)
                     flash(error_msg, "error")
                     return render_template("add_vacation.html")
+
+            # Use end_date = start_date for single day vacations
+            if not end_date:
+                end_date = start_date
+
+            # Check for duplicate vacation
+            is_duplicate, duplicate_error = check_duplicate_vacation(
+                int(current_user.id), start_date, end_date
+            )
+            if is_duplicate:
+                if is_htmx_request():
+                    return handle_htmx_error(duplicate_error)
+                flash(duplicate_error, "error")
+                return render_template("add_vacation.html")
+
+            # Check for overlapping vacations
+            has_overlap, overlap_error = check_vacation_overlap(
+                int(current_user.id), start_date, end_date
+            )
+            if has_overlap:
+                if is_htmx_request():
+                    return handle_htmx_error(overlap_error)
+                flash(overlap_error, "error")
+                return render_template("add_vacation.html")
 
             # Use current user's ID instead of selecting from dropdown
             add_vacation_db(int(current_user.id), start_date, end_date)
