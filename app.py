@@ -8,10 +8,12 @@ import logging
 import secrets
 import string
 import os
+import requests
 from pathlib import Path
 from datetime import datetime, date
 from dotenv import load_dotenv
 from email_service import EmailService
+from vacation_webhooks import send_vacation_added_webhook, send_vacation_deleted_webhook
 from manage_vacations import (
     get_db_connection, 
     validate_date, 
@@ -228,6 +230,17 @@ def add_vacation():
             # Use current user's ID instead of selecting from dropdown
             add_vacation_db(int(current_user.id), start_date, end_date)
             
+            # Send webhook notification (non-blocking)
+            try:
+                send_vacation_added_webhook(
+                    user_email=current_user.mail,
+                    start_date=start_date,
+                    end_date=end_date or start_date  # Use start_date if end_date is None
+                )
+            except Exception as e:
+                logging.warning(f"Failed to send vacation added webhook: {e}")
+                # Don't fail the vacation creation if webhook fails
+            
             # For HTMX requests, return updated vacation table and success message
             if request.headers.get('HX-Request'):
                 with get_db_connection() as conn:
@@ -281,10 +294,11 @@ def add_vacation():
 @login_required
 def delete_vacation(vacation_id):
     try:
-        # Check if the vacation belongs to the current user
+        # Check if the vacation belongs to the current user and get vacation details
+        vacation_details = None
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT user_id FROM vacation WHERE id = ?", (vacation_id,))
+            cursor.execute("SELECT user_id, start_date, end_date FROM vacation WHERE id = ?", (vacation_id,))
             vacation = cursor.fetchone()
             
             if not vacation:
@@ -298,8 +312,26 @@ def delete_vacation(vacation_id):
                     return '<div class="alert alert-danger">You can only delete your own vacations.</div>', 403
                 flash('You can only delete your own vacations.', 'error')
                 return redirect(url_for('my_vacations'))
+            
+            # Store vacation details for webhook
+            vacation_details = {
+                'start_date': vacation['start_date'],
+                'end_date': vacation['end_date']
+            }
         
         delete_vacation_db(vacation_id)
+        
+        # Send webhook notification (non-blocking)
+        if vacation_details:
+            try:
+                send_vacation_deleted_webhook(
+                    user_email=current_user.mail,
+                    start_date=vacation_details['start_date'],
+                    end_date=vacation_details['end_date']
+                )
+            except Exception as e:
+                logging.warning(f"Failed to send vacation deleted webhook: {e}")
+                # Don't fail the vacation deletion if webhook fails
         
         # For HTMX requests, return empty response to remove the row
         if request.headers.get('HX-Request'):
