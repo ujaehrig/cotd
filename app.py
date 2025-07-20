@@ -165,6 +165,26 @@ def my_vacations():
         flash(f'Error loading vacations: {str(e)}', 'error')
         return render_template('my_vacations.html', vacations=[], today_date=datetime.now().strftime('%Y-%m-%d'))
 
+@app.route('/vacation_table')
+@login_required
+def vacation_table():
+    """HTMX endpoint to return just the vacation table"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT v.id, v.start_date, v.end_date
+                FROM vacation v
+                WHERE v.user_id = ?
+                ORDER BY v.start_date
+            """, (int(current_user.id),))
+            
+            vacations_data = cursor.fetchall()
+            
+        return render_template('partials/vacation_table.html', vacations=vacations_data, today_date=datetime.now().strftime('%Y-%m-%d'))
+    except Exception as e:
+        return f'<div class="alert alert-danger">Error loading vacations: {str(e)}</div>', 500
+
 @app.route('/add_vacation', methods=['GET', 'POST'])
 @login_required
 def add_vacation():
@@ -178,14 +198,52 @@ def add_vacation():
             
             # Use current user's ID instead of selecting from dropdown
             add_vacation_db(int(current_user.id), start_date, end_date)
+            
+            # For HTMX requests, return updated vacation table and success message
+            if request.headers.get('HX-Request'):
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        SELECT v.id, v.start_date, v.end_date
+                        FROM vacation v
+                        WHERE v.user_id = ?
+                        ORDER BY v.start_date
+                    """, (int(current_user.id),))
+                    vacations_data = cursor.fetchall()
+                
+                # Return both success message and updated table
+                success_msg = '<div class="alert alert-success alert-dismissible fade show" role="alert"><i class="fas fa-check-circle me-2"></i>Vacation period added successfully!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>'
+                table_html = render_template('partials/vacation_table.html', 
+                                           vacations=vacations_data, 
+                                           today_date=datetime.now().strftime('%Y-%m-%d'))
+                
+                # Use HTMX response headers to update multiple targets
+                response = app.response_class(
+                    response=table_html,
+                    status=200,
+                    mimetype='text/html'
+                )
+                response.headers['HX-Trigger'] = 'vacationAdded'
+                response.headers['HX-Retarget'] = '#vacation-table'
+                response.headers['HX-Reswap'] = 'innerHTML'
+                
+                # Also clear the form
+                return response
+            
             flash('Vacation period added successfully!', 'success')
             return redirect(url_for('my_vacations'))
         except Exception as e:
+            if request.headers.get('HX-Request'):
+                return f'<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Error: {str(e)}</div>', 400
             flash(f'Error adding vacation: {str(e)}', 'error')
+    
+    # For HTMX requests, return just the form
+    if request.headers.get('HX-Request'):
+        return render_template('partials/add_vacation_form.html')
     
     return render_template('add_vacation.html')
 
-@app.route('/delete_vacation/<int:vacation_id>', methods=['POST'])
+@app.route('/delete_vacation/<int:vacation_id>', methods=['POST', 'DELETE'])
 @login_required
 def delete_vacation(vacation_id):
     try:
@@ -196,16 +254,33 @@ def delete_vacation(vacation_id):
             vacation = cursor.fetchone()
             
             if not vacation:
+                if request.headers.get('HX-Request'):
+                    return '<div class="alert alert-danger">Vacation not found.</div>', 404
                 flash('Vacation not found.', 'error')
                 return redirect(url_for('my_vacations'))
             
             if str(vacation['user_id']) != current_user.id:
+                if request.headers.get('HX-Request'):
+                    return '<div class="alert alert-danger">You can only delete your own vacations.</div>', 403
                 flash('You can only delete your own vacations.', 'error')
                 return redirect(url_for('my_vacations'))
         
         delete_vacation_db(vacation_id)
+        
+        # For HTMX requests, return empty response to remove the row
+        if request.headers.get('HX-Request'):
+            response = app.response_class(
+                response='',
+                status=200,
+                mimetype='text/html'
+            )
+            response.headers['HX-Trigger'] = 'vacationDeleted'
+            return response
+        
         flash('Vacation period deleted successfully!', 'success')
     except Exception as e:
+        if request.headers.get('HX-Request'):
+            return f'<div class="alert alert-danger">Error: {str(e)}</div>', 500
         flash(f'Error deleting vacation: {str(e)}', 'error')
     
     return redirect(url_for('my_vacations'))

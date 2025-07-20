@@ -1,0 +1,96 @@
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fas fa-plus me-2"></i>Add Vacation Period</h5>
+        <button type="button" class="btn-close" 
+                onclick="document.getElementById('vacation-form-container').innerHTML = ''"
+                aria-label="Close"></button>
+    </div>
+    <div class="card-body">
+        <form hx-post="{{ url_for('add_vacation') }}"
+              hx-target="#vacation-table"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) { document.getElementById('vacation-form-container').innerHTML = ''; showSuccessMessage('Vacation period added successfully!'); }">
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="start_date" class="form-label">
+                            <i class="fas fa-calendar-alt me-2"></i>Start Date
+                        </label>
+                        <input type="date" name="start_date" id="start_date" class="form-control" required>
+                        <div class="form-text">The first day of the vacation period.</div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="end_date" class="form-label">
+                            <i class="fas fa-calendar-check me-2"></i>End Date (Optional)
+                        </label>
+                        <input type="date" name="end_date" id="end_date" class="form-control">
+                        <div class="form-text">Leave empty for single-day vacation.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="singleDay" onchange="toggleSingleDay()">
+                    <label class="form-check-label" for="singleDay">
+                        <i class="fas fa-calendar-day me-2"></i>Single day vacation
+                    </label>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary"
+                        onclick="document.getElementById('vacation-form-container').innerHTML = ''">
+                    <i class="fas fa-times me-1"></i>Cancel
+                </button>
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-plus me-1"></i>Add Vacation
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function toggleSingleDay() {
+    const singleDayCheckbox = document.getElementById('singleDay');
+    const endDateInput = document.getElementById('end_date');
+    
+    if (singleDayCheckbox.checked) {
+        endDateInput.disabled = true;
+        endDateInput.value = '';
+        endDateInput.style.opacity = '0.5';
+    } else {
+        endDateInput.disabled = false;
+        endDateInput.style.opacity = '1';
+    }
+}
+
+// Set minimum date to today
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    const startDateInput = document.getElementById('start_date');
+    const endDateInput = document.getElementById('end_date');
+    
+    if (startDateInput) {
+        startDateInput.min = today;
+        
+        // Update end date minimum when start date changes
+        startDateInput.addEventListener('change', function() {
+            endDateInput.min = this.value;
+            
+            // If end date is before start date, clear it
+            if (endDateInput.value && endDateInput.value < this.value) {
+                endDateInput.value = '';
+            }
+        });
+    }
+    
+    if (endDateInput) {
+        endDateInput.min = today;
+    }
+});
+</script>
