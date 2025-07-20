@@ -9,7 +9,7 @@ import secrets
 import string
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date
 from dotenv import load_dotenv
 from email_service import EmailService
 from manage_vacations import (
@@ -196,6 +196,35 @@ def add_vacation():
             if not end_date:
                 end_date = None
             
+            # Server-side validation: prevent past dates
+            today = date.today()
+            
+            # Validate start date
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            if start_date_obj < today:
+                error_msg = 'Start date cannot be in the past. Please select today or a future date.'
+                if request.headers.get('HX-Request'):
+                    return f'<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>{error_msg}</div>', 400
+                flash(error_msg, 'error')
+                return render_template('add_vacation.html')
+            
+            # Validate end date if provided
+            if end_date:
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+                if end_date_obj < today:
+                    error_msg = 'End date cannot be in the past. Please select today or a future date.'
+                    if request.headers.get('HX-Request'):
+                        return f'<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>{error_msg}</div>', 400
+                    flash(error_msg, 'error')
+                    return render_template('add_vacation.html')
+                
+                if end_date_obj < start_date_obj:
+                    error_msg = 'End date cannot be before start date.'
+                    if request.headers.get('HX-Request'):
+                        return f'<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>{error_msg}</div>', 400
+                    flash(error_msg, 'error')
+                    return render_template('add_vacation.html')
+            
             # Use current user's ID instead of selecting from dropdown
             add_vacation_db(int(current_user.id), start_date, end_date)
             
@@ -232,6 +261,11 @@ def add_vacation():
             
             flash('Vacation period added successfully!', 'success')
             return redirect(url_for('my_vacations'))
+        except ValueError as e:
+            error_msg = 'Invalid date format. Please use the date picker.'
+            if request.headers.get('HX-Request'):
+                return f'<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>{error_msg}</div>', 400
+            flash(error_msg, 'error')
         except Exception as e:
             if request.headers.get('HX-Request'):
                 return f'<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Error: {str(e)}</div>', 400

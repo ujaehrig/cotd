@@ -9,8 +9,11 @@
         <form hx-post="{{ url_for('add_vacation') }}"
               hx-target="#vacation-table"
               hx-swap="innerHTML"
-              hx-on::after-request="if(event.detail.successful) { document.getElementById('vacation-form-container').innerHTML = ''; showSuccessMessage('Vacation period added successfully!'); }">
+              hx-on::after-request="if(event.detail.successful) { document.getElementById('vacation-form-container').innerHTML = ''; showSuccessMessage('Vacation period added successfully!'); }"
+              hx-on::response-error="handleFormError(event)">
             
+            <!-- Error message container -->
+            <div id="form-error-container"></div>
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-3">
@@ -18,7 +21,7 @@
                             <i class="fas fa-calendar-alt me-2"></i>Start Date
                         </label>
                         <input type="date" name="start_date" id="start_date" class="form-control" required>
-                        <div class="form-text">The first day of the vacation period.</div>
+                        <div class="form-text">The first day of the vacation period (today or future).</div>
                     </div>
                 </div>
                 <div class="col-md-6">
@@ -55,6 +58,57 @@
 </div>
 
 <script>
+// Handle form-specific errors
+function handleFormError(event) {
+    let errorMessage = 'An error occurred. Please try again.';
+    
+    // Try to extract the actual error message from the server response
+    if (event.detail.xhr && event.detail.xhr.responseText) {
+        try {
+            // Check if the response contains an alert div with error message
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = event.detail.xhr.responseText;
+            const alertDiv = tempDiv.querySelector('.alert');
+            
+            if (alertDiv) {
+                // Extract text content, removing HTML tags and icons
+                const textContent = alertDiv.textContent || alertDiv.innerText;
+                if (textContent) {
+                    errorMessage = textContent.replace(/^\s*\S+\s*/, '').trim(); // Remove icon text
+                }
+            }
+        } catch (e) {
+            console.log('Could not parse error response:', e);
+        }
+    }
+    
+    // Show error in the form
+    showFormError(errorMessage);
+}
+
+// Function to show errors within the form
+function showFormError(message) {
+    const errorContainer = document.getElementById('form-error-container');
+    if (errorContainer) {
+        const alertHtml = `
+            <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `;
+        errorContainer.innerHTML = alertHtml;
+        
+        // Auto-dismiss after 7 seconds
+        setTimeout(() => {
+            const alert = errorContainer.querySelector('.alert');
+            if (alert) {
+                const bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            }
+        }, 7000);
+    }
+}
+
 function toggleSingleDay() {
     const singleDayCheckbox = document.getElementById('singleDay');
     const endDateInput = document.getElementById('end_date');
@@ -69,28 +123,63 @@ function toggleSingleDay() {
     }
 }
 
-// Set minimum date to today
+// Set minimum date to today and add validation
 document.addEventListener('DOMContentLoaded', function() {
     const today = new Date().toISOString().split('T')[0];
     const startDateInput = document.getElementById('start_date');
     const endDateInput = document.getElementById('end_date');
     
     if (startDateInput) {
+        // Set minimum date to today (no past dates allowed)
         startDateInput.min = today;
         
         // Update end date minimum when start date changes
         startDateInput.addEventListener('change', function() {
-            endDateInput.min = this.value;
+            const selectedStartDate = this.value;
+            
+            // Clear any previous error messages
+            const errorContainer = document.getElementById('form-error-container');
+            if (errorContainer) {
+                errorContainer.innerHTML = '';
+            }
+            
+            // Validate start date is not in the past
+            if (selectedStartDate < today) {
+                this.value = today;
+                showFormError('Start date cannot be in the past. Setting to today.');
+                return;
+            }
+            
+            // Update end date minimum to match start date
+            endDateInput.min = selectedStartDate;
             
             // If end date is before start date, clear it
-            if (endDateInput.value && endDateInput.value < this.value) {
+            if (endDateInput.value && endDateInput.value < selectedStartDate) {
                 endDateInput.value = '';
+                showFormError('End date cleared because it was before the new start date.');
             }
         });
     }
     
     if (endDateInput) {
         endDateInput.min = today;
+        
+        // Validate end date when changed
+        endDateInput.addEventListener('change', function() {
+            const startDate = startDateInput.value;
+            const endDate = this.value;
+            
+            // Clear any previous error messages
+            const errorContainer = document.getElementById('form-error-container');
+            if (errorContainer) {
+                errorContainer.innerHTML = '';
+            }
+            
+            if (startDate && endDate && endDate < startDate) {
+                this.value = '';
+                showFormError('End date cannot be before start date.');
+            }
+        });
     }
 });
 </script>

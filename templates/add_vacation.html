@@ -32,7 +32,7 @@
                             <i class="fas fa-calendar-alt me-2"></i>Start Date
                         </label>
                         <input type="date" name="start_date" id="start_date" class="form-control" required>
-                        <div class="form-text">The first day of the vacation period.</div>
+                        <div class="form-text">The first day of the vacation period (today or future).</div>
                     </div>
 
                     <div class="mb-3">
@@ -136,34 +136,81 @@ function toggleSingleDay() {
     }
 }
 
-// Set minimum date to today
+// Set minimum date to today and add validation
 document.addEventListener('DOMContentLoaded', function() {
     const today = new Date().toISOString().split('T')[0];
-    document.getElementById('start_date').min = today;
-    document.getElementById('end_date').min = today;
+    const startDateInput = document.getElementById('start_date');
+    const endDateInput = document.getElementById('end_date');
     
-    // Update end date minimum when start date changes
-    document.getElementById('start_date').addEventListener('change', function() {
-        document.getElementById('end_date').min = this.value;
+    if (startDateInput) {
+        // Set minimum date to today (no past dates allowed)
+        startDateInput.min = today;
         
-        // If end date is before start date, clear it
-        const endDate = document.getElementById('end_date');
-        if (endDate.value && endDate.value < this.value) {
-            endDate.value = '';
-        }
-    });
+        // Update end date minimum when start date changes
+        startDateInput.addEventListener('change', function() {
+            const selectedStartDate = this.value;
+            
+            // Validate start date is not in the past
+            if (selectedStartDate < today) {
+                this.value = today;
+                alert('Start date cannot be in the past. Setting to today.');
+                return;
+            }
+            
+            // Update end date minimum to match start date
+            endDateInput.min = selectedStartDate;
+            
+            // If end date is before start date, clear it
+            if (endDateInput.value && endDateInput.value < selectedStartDate) {
+                endDateInput.value = '';
+                alert('End date cleared because it was before the new start date.');
+            }
+        });
+    }
+    
+    if (endDateInput) {
+        endDateInput.min = today;
+        
+        // Validate end date when changed
+        endDateInput.addEventListener('change', function() {
+            const startDate = startDateInput.value;
+            const endDate = this.value;
+            
+            if (startDate && endDate && endDate < startDate) {
+                this.value = '';
+                alert('End date cannot be before start date.');
+            }
+        });
+    }
 });
 
 // Form validation
 document.getElementById('vacationForm').addEventListener('submit', function(e) {
+    const today = new Date().toISOString().split('T')[0];
     const startDate = document.getElementById('start_date').value;
     const endDate = document.getElementById('end_date').value;
     const singleDay = document.getElementById('singleDay').checked;
     
-    if (!singleDay && endDate && endDate < startDate) {
+    // Validate start date is not in the past
+    if (startDate < today) {
         e.preventDefault();
-        alert('End date cannot be before start date.');
+        alert('Start date cannot be in the past. Please select today or a future date.');
         return false;
+    }
+    
+    // Validate end date if provided
+    if (endDate) {
+        if (endDate < today) {
+            e.preventDefault();
+            alert('End date cannot be in the past. Please select today or a future date.');
+            return false;
+        }
+        
+        if (endDate < startDate) {
+            e.preventDefault();
+            alert('End date cannot be before start date.');
+            return false;
+        }
     }
 });
 </script>
