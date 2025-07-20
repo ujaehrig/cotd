@@ -256,7 +256,8 @@ function toggleSingleDay() {
 }
 
 // Set minimum date to today and add validation
-document.addEventListener('DOMContentLoaded', function() {
+// Run immediately since this is loaded dynamically via HTMX
+(function() {
     const today = new Date().toISOString().split('T')[0];
     const startDateInput = document.getElementById('start_date');
     const endDateInput = document.getElementById('end_date');
@@ -313,5 +314,5 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-});
+})();
 </script>
