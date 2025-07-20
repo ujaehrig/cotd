@@ -30,6 +30,11 @@
                                 <i class="fas fa-umbrella-beach me-1"></i>My Vacations
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('vacation_overview') }}">
+                                <i class="fas fa-calendar-alt me-1"></i>Team Overview
+                            </a>
+                        </li>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
                                 <i class="fas fa-user me-1"></i>{{ current_user.mail }}

@@ -147,6 +147,58 @@ def logout():
     flash('You have been logged out successfully.', 'success')
     return redirect(url_for('index'))
 
+@app.route('/vacation_overview')
+@login_required
+def vacation_overview():
+    """Show vacation overview for all users"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Get all users with their vacation periods
+            cursor.execute("""
+                SELECT 
+                    u.id,
+                    u.mail,
+                    v.id as vacation_id,
+                    v.start_date,
+                    v.end_date
+                FROM user u
+                LEFT JOIN vacation v ON u.id = v.user_id
+                ORDER BY u.mail, v.start_date
+            """)
+            
+            results = cursor.fetchall()
+            
+            # Group vacations by user
+            users_vacations = {}
+            for row in results:
+                user_email = row['mail']
+                if user_email not in users_vacations:
+                    users_vacations[user_email] = {
+                        'user_id': row['id'],
+                        'email': user_email,
+                        'vacations': []
+                    }
+                
+                # Only add vacation if it exists (LEFT JOIN might return NULL)
+                if row['vacation_id']:
+                    users_vacations[user_email]['vacations'].append({
+                        'id': row['vacation_id'],
+                        'start_date': row['start_date'],
+                        'end_date': row['end_date']
+                    })
+            
+            # Convert to list and sort by email
+            users_list = list(users_vacations.values())
+            users_list.sort(key=lambda x: x['email'])
+            
+        return render_template('vacation_overview.html', 
+                             users=users_list, 
+                             today_date=datetime.now().strftime('%Y-%m-%d'))
+    except Exception as e:
+        flash(f'Error loading vacation overview: {str(e)}', 'error')
+        return render_template('vacation_overview.html', users=[], today_date=datetime.now().strftime('%Y-%m-%d'))
+
 @app.route('/my_vacations')
 @login_required
 def my_vacations():

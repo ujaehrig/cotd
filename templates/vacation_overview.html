@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}Vacation Overview - Vacation Management{% endblock %}
+
+{% block head %}
+{{ super() }}
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<style>
+.vacation-card {
+    transition: transform 0.2s;
+}
+.vacation-card:hover {
+    transform: translateY(-2px);
+}
+.vacation-status-active {
+    border-left: 4px solid #ffc107;
+}
+.vacation-status-upcoming {
+    border-left: 4px solid #28a745;
+}
+.vacation-status-past {
+    border-left: 4px solid #6c757d;
+}
+.user-section {
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+.user-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-calendar-alt me-2"></i>Vacation Overview</h2>
+    <div class="btn-group" role="group">
+        <a href="{{ url_for('my_vacations') }}" class="btn btn-outline-primary">
+            <i class="fas fa-user me-1"></i>My Vacations
+        </a>
+        <button class="btn btn-outline-secondary" onclick="toggleView()">
+            <i class="fas fa-th-list me-1"></i><span id="view-toggle-text">Calendar View</span>
+        </button>
+    </div>
+</div>
+
+<!-- Summary Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-primary">{{ users|length }}</h5>
+                <p class="card-text">Total Users</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-success" id="upcoming-count">0</h5>
+                <p class="card-text">Upcoming Vacations</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-warning" id="active-count">0</h5>
+                <p class="card-text">Active Vacations</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-info" id="total-vacation-count">0</h5>
+                <p class="card-text">Total Vacations</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter and Search -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <label for="search-users" class="form-label">Search Users</label>
+                <input type="text" id="search-users" class="form-control" placeholder="Search by email..." onkeyup="filterUsers()">
+            </div>
+            <div class="col-md-3">
+                <label for="status-filter" class="form-label">Filter by Status</label>
+                <select id="status-filter" class="form-select" onchange="filterUsers()">
+                    <option value="">All Vacations</option>
+                    <option value="active">Active Only</option>
+                    <option value="upcoming">Upcoming Only</option>
+                    <option value="past">Past Only</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="month-filter" class="form-label">Filter by Month</label>
+                <select id="month-filter" class="form-select" onchange="filterUsers()">
+                    <option value="">All Months</option>
+                    <option value="2025-01">January 2025</option>
+                    <option value="2025-02">February 2025</option>
+                    <option value="2025-03">March 2025</option>
+                    <option value="2025-04">April 2025</option>
+                    <option value="2025-05">May 2025</option>
+                    <option value="2025-06">June 2025</option>
+                    <option value="2025-07">July 2025</option>
+                    <option value="2025-08">August 2025</option>
+                    <option value="2025-09">September 2025</option>
+                    <option value="2025-10">October 2025</option>
+                    <option value="2025-11">November 2025</option>
+                    <option value="2025-12">December 2025</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Vacation Overview -->
+<div class="card">
+    <div class="card-body">
+        {% if users %}
+            <div id="users-container">
+                {% for user in users %}
+                <div class="user-section" data-user-email="{{ user.email }}">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">
+                            <i class="fas fa-user me-2"></i>{{ user.email }}
+                            {% if user.email == current_user.mail %}
+                                <span class="badge bg-primary ms-2">You</span>
+                            {% endif %}
+                        </h5>
+                        <span class="badge bg-secondary">{{ user.vacations|length }} vacation(s)</span>
+                    </div>
+                    
+                    {% if user.vacations %}
+                        <div class="row">
+                            {% for vacation in user.vacations %}
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <div class="card vacation-card h-100 
+                                    {% set today = today_date %}
+                                    {% if vacation.end_date < today %}vacation-status-past
+                                    {% elif vacation.start_date <= today and vacation.end_date >= today %}vacation-status-active
+                                    {% else %}vacation-status-upcoming{% endif %}"
+                                    data-vacation-status="
+                                    {% if vacation.end_date < today %}past
+                                    {% elif vacation.start_date <= today and vacation.end_date >= today %}active
+                                    {% else %}upcoming{% endif %}"
+                                    data-vacation-month="{{ vacation.start_date[:7] }}">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <h6 class="card-title mb-0">
+                                                {% if vacation.start_date == vacation.end_date %}
+                                                    {{ vacation.start_date }}
+                                                {% else %}
+                                                    {{ vacation.start_date }} - {{ vacation.end_date }}
+                                                {% endif %}
+                                            </h6>
+                                            <span class="badge 
+                                                {% if vacation.end_date < today %}bg-secondary
+                                                {% elif vacation.start_date <= today and vacation.end_date >= today %}bg-warning
+                                                {% else %}bg-success{% endif %}">
+                                                {% if vacation.end_date < today %}Past
+                                                {% elif vacation.start_date <= today and vacation.end_date >= today %}Active
+                                                {% else %}Upcoming{% endif %}
+                                            </span>
+                                        </div>
+                                        <p class="card-text">
+                                            <small class="text-muted">
+                                                {% if vacation.start_date == vacation.end_date %}
+                                                    <i class="fas fa-calendar-day me-1"></i>Single Day
+                                                {% else %}
+                                                    <i class="fas fa-calendar-week me-1"></i>
+                                                    {{ (vacation.end_date | strptime('%Y-%m-%d') - vacation.start_date | strptime('%Y-%m-%d')).days + 1 }} days
+                                                {% endif %}
+                                            </small>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-3">
+                            <i class="fas fa-calendar-times fa-2x text-muted mb-2"></i>
+                            <p class="text-muted mb-0">No vacation periods scheduled</p>
+                        </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No users found</h4>
+                <p class="text-muted">No users are registered in the system.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Information Card -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h6><i class="fas fa-info-circle me-2"></i>Vacation Overview Information</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled">
+                    <li class="mb-2">
+                        <i class="fas fa-eye text-primary me-2"></i>
+                        View all team members' vacation schedules in one place
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-filter text-success me-2"></i>
+                        Filter by status, month, or search by user email
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-chart-bar text-info me-2"></i>
+                        Track vacation statistics and team availability
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-calendar-check text-warning me-2"></i>
+                        Plan team schedules and avoid conflicts
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Calculate and update statistics
+function updateStatistics() {
+    const vacationCards = document.querySelectorAll('.vacation-card');
+    let upcomingCount = 0;
+    let activeCount = 0;
+    let totalCount = vacationCards.length;
+    
+    vacationCards.forEach(card => {
+        const status = card.getAttribute('data-vacation-status');
+        if (status === 'upcoming') upcomingCount++;
+        if (status === 'active') activeCount++;
+    });
+    
+    document.getElementById('upcoming-count').textContent = upcomingCount;
+    document.getElementById('active-count').textContent = activeCount;
+    document.getElementById('total-vacation-count').textContent = totalCount;
+}
+
+// Filter users and vacations
+function filterUsers() {
+    const searchTerm = document.getElementById('search-users').value.toLowerCase();
+    const statusFilter = document.getElementById('status-filter').value;
+    const monthFilter = document.getElementById('month-filter').value;
+    
+    const userSections = document.querySelectorAll('.user-section');
+    
+    userSections.forEach(section => {
+        const userEmail = section.getAttribute('data-user-email').toLowerCase();
+        const vacationCards = section.querySelectorAll('.vacation-card');
+        
+        // Check if user email matches search
+        const emailMatches = userEmail.includes(searchTerm);
+        
+        // Filter vacation cards within this user section
+        let hasVisibleVacations = false;
+        vacationCards.forEach(card => {
+            const cardStatus = card.getAttribute('data-vacation-status');
+            const cardMonth = card.getAttribute('data-vacation-month');
+            
+            const statusMatches = !statusFilter || cardStatus === statusFilter;
+            const monthMatches = !monthFilter || cardMonth === monthFilter;
+            
+            if (statusMatches && monthMatches) {
+                card.style.display = 'block';
+                hasVisibleVacations = true;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        
+        // Show user section if email matches and has visible vacations (or no vacations but email matches)
+        if (emailMatches && (hasVisibleVacations || vacationCards.length === 0)) {
+            section.style.display = 'block';
+        } else {
+            section.style.display = 'none';
+        }
+    });
+    
+    updateStatistics();
+}
+
+// Toggle view (placeholder for future calendar view)
+function toggleView() {
+    const toggleText = document.getElementById('view-toggle-text');
+    if (toggleText.textContent === 'Calendar View') {
+        toggleText.textContent = 'List View';
+        // TODO: Implement calendar view
+        alert('Calendar view coming soon!');
+    } else {
+        toggleText.textContent = 'Calendar View';
+    }
+}
+
+// Initialize statistics on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateStatistics();
+});
+</script>
+{% endblock %}
