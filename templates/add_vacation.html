@@ -14,7 +14,7 @@
     <div class="col-md-8">
         <div class="card">
             <div class="card-body">
-                <form method="POST" id="vacationForm">
+                <form method="POST" id="vacationForm" onsubmit="return validateFormBeforeSubmit(event)">
                     {% if current_user.is_authenticated %}
                     <div class="mb-3">
                         <label class="form-label">
@@ -121,6 +121,42 @@
 
 {% block scripts %}
 <script>
+// Validate form before submission to prevent server requests with invalid data
+function validateFormBeforeSubmit(event) {
+    const today = new Date().toISOString().split('T')[0];
+    const startDateInput = document.getElementById('start_date');
+    const endDateInput = document.getElementById('end_date');
+    const startDate = startDateInput.value;
+    const endDate = endDateInput.value;
+    
+    // Validate start date
+    if (!startDate) {
+        alert('Start date is required.');
+        return false; // Prevent form submission
+    }
+    
+    if (startDate < today) {
+        alert('Start date cannot be in the past. Please select today or a future date.');
+        return false; // Prevent form submission
+    }
+    
+    // Validate end date if provided
+    if (endDate) {
+        if (endDate < today) {
+            alert('End date cannot be in the past. Please select today or a future date.');
+            return false; // Prevent form submission
+        }
+        
+        if (endDate < startDate) {
+            alert('End date cannot be before start date.');
+            return false; // Prevent form submission
+        }
+    }
+    
+    // All validation passed, allow form submission
+    return true;
+}
+
 function toggleSingleDay() {
     const singleDayCheckbox = document.getElementById('singleDay');
     const endDateInput = document.getElementById('end_date');
@@ -150,7 +186,7 @@ document.addEventListener('DOMContentLoaded', function() {
         startDateInput.addEventListener('change', function() {
             const selectedStartDate = this.value;
             
-            // Validate start date is not in the past
+            // Validate start date is not in the past (backup validation)
             if (selectedStartDate < today) {
                 this.value = today;
                 alert('Start date cannot be in the past. Setting to today.');
@@ -181,36 +217,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('End date cannot be before start date.');
             }
         });
-    }
-});
-
-// Form validation
-document.getElementById('vacationForm').addEventListener('submit', function(e) {
-    const today = new Date().toISOString().split('T')[0];
-    const startDate = document.getElementById('start_date').value;
-    const endDate = document.getElementById('end_date').value;
-    const singleDay = document.getElementById('singleDay').checked;
-    
-    // Validate start date is not in the past
-    if (startDate < today) {
-        e.preventDefault();
-        alert('Start date cannot be in the past. Please select today or a future date.');
-        return false;
-    }
-    
-    // Validate end date if provided
-    if (endDate) {
-        if (endDate < today) {
-            e.preventDefault();
-            alert('End date cannot be in the past. Please select today or a future date.');
-            return false;
-        }
-        
-        if (endDate < startDate) {
-            e.preventDefault();
-            alert('End date cannot be before start date.');
-            return false;
-        }
     }
 });
 </script>

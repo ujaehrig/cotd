@@ -10,7 +10,8 @@
               hx-target="#vacation-table"
               hx-swap="innerHTML"
               hx-on::after-request="if(event.detail.successful) { document.getElementById('vacation-form-container').innerHTML = ''; showSuccessMessage('Vacation period added successfully!'); }"
-              hx-on::response-error="handleFormError(event)">
+              hx-on::response-error="handleFormError(event)"
+              onsubmit="return validateFormBeforeSubmit(event)">
             
             <!-- Error message container -->
             <div id="form-error-container"></div>
@@ -58,6 +59,48 @@
 </div>
 
 <script>
+// Validate form before submission to prevent server requests with invalid data
+function validateFormBeforeSubmit(event) {
+    const today = new Date().toISOString().split('T')[0];
+    const startDateInput = document.getElementById('start_date');
+    const endDateInput = document.getElementById('end_date');
+    const startDate = startDateInput.value;
+    const endDate = endDateInput.value;
+    
+    // Clear any previous error messages
+    const errorContainer = document.getElementById('form-error-container');
+    if (errorContainer) {
+        errorContainer.innerHTML = '';
+    }
+    
+    // Validate start date
+    if (!startDate) {
+        showFormError('Start date is required.');
+        return false; // Prevent form submission
+    }
+    
+    if (startDate < today) {
+        showFormError('Start date cannot be in the past. Please select today or a future date.');
+        return false; // Prevent form submission
+    }
+    
+    // Validate end date if provided
+    if (endDate) {
+        if (endDate < today) {
+            showFormError('End date cannot be in the past. Please select today or a future date.');
+            return false; // Prevent form submission
+        }
+        
+        if (endDate < startDate) {
+            showFormError('End date cannot be before start date.');
+            return false; // Prevent form submission
+        }
+    }
+    
+    // All validation passed, allow form submission
+    return true;
+}
+
 // Handle form-specific errors
 function handleFormError(event) {
     let errorMessage = 'An error occurred. Please try again.';
@@ -143,7 +186,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 errorContainer.innerHTML = '';
             }
             
-            // Validate start date is not in the past
+            // Validate start date is not in the past (backup validation)
             if (selectedStartDate < today) {
                 this.value = today;
                 showFormError('Start date cannot be in the past. Setting to today.');
