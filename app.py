@@ -677,6 +677,11 @@ def change_password():
                     flash("Current password is incorrect.", "error")
                     return render_template("change_password.html")
 
+                # If password reset is required, enforce different password
+                if current_user.password_reset_required and current_password == new_password:
+                    flash("You must choose a different password when a password reset is required.", "error")
+                    return render_template("change_password.html")
+
                 new_password_hash = generate_password_hash(new_password)
                 cursor.execute(
                     "UPDATE user SET password_hash = ?, password_reset_required = 0 WHERE id = ?",
