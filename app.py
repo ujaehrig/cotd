@@ -632,11 +632,68 @@ def delete_vacation(vacation_id):
                 logging.warning(f"Failed to send vacation deleted webhook: {e}")
                 # Don't fail the vacation deletion if webhook fails
 
-        # For HTMX requests, return empty response to remove the row
+        # For HTMX requests, check if we need to return updated vacation overview
         if request.headers.get("HX-Request"):
-            response = app.response_class(response="", status=200, mimetype="text/html")
-            response.headers["HX-Trigger"] = "vacationDeleted"
-            return response
+            # Check if the request is coming from vacation overview page
+            referer = request.headers.get("Referer", "")
+            if "vacation_overview" in referer:
+                # Return updated vacation overview content
+                try:
+                    with get_db_connection() as conn:
+                        cursor = conn.cursor()
+                        # Get all users with their vacation periods
+                        cursor.execute("""
+                            SELECT 
+                                u.id,
+                                u.mail,
+                                v.id as vacation_id,
+                                v.start_date,
+                                v.end_date
+                            FROM user u
+                            LEFT JOIN vacation v ON u.id = v.user_id
+                            ORDER BY u.mail, v.start_date
+                        """)
+
+                        results = cursor.fetchall()
+
+                        # Group vacations by user
+                        users_vacations = {}
+                        for row in results:
+                            user_email = row["mail"]
+                            if user_email not in users_vacations:
+                                users_vacations[user_email] = {
+                                    "user_id": row["id"],
+                                    "email": user_email,
+                                    "vacations": [],
+                                }
+
+                            # Only add vacation if it exists (LEFT JOIN might return NULL)
+                            if row["vacation_id"]:
+                                users_vacations[user_email]["vacations"].append(
+                                    {
+                                        "id": row["vacation_id"],
+                                        "start_date": row["start_date"],
+                                        "end_date": row["end_date"],
+                                    }
+                                )
+
+                        # Convert to list and sort by email
+                        users_list = list(users_vacations.values())
+                        users_list.sort(key=lambda x: x["email"])
+
+                    return render_template(
+                        "partials/vacation_overview_users.html",
+                        users=users_list,
+                        today_date=get_today_date_string(),
+                    )
+                except Exception as e:
+                    logging.error(f"Error loading vacation overview after deletion: {e}")
+                    return f'<div class="alert alert-danger">Error refreshing vacation overview: {str(e)}</div>', 500
+            else:
+                # Regular my_vacations page - return empty response to remove the row
+                response = app.response_class(response="", status=200, mimetype="text/html")
+                response.headers["HX-Trigger"] = "vacationDeleted"
+                return response
 
         flash("Vacation period deleted successfully!", "success")
     except Exception as e:
