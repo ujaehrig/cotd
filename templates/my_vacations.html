@@ -8,29 +8,38 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="fas fa-umbrella-beach me-2"></i>My Vacations</h2>
-    <button class="btn btn-success" 
-            hx-get="{{ url_for('add_vacation') }}"
-            hx-target="#vacation-form-container"
-            hx-swap="innerHTML">
-        <i class="fas fa-plus me-1"></i>Add Vacation
-    </button>
-</div>
+<div x-data="myVacations()">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-umbrella-beach me-2"></i>My Vacations</h2>
+        <button class="btn btn-success" 
+                :disabled="isLoading"
+                hx-get="{{ url_for('add_vacation') }}"
+                hx-target="#vacation-form-container"
+                hx-swap="innerHTML"
+                @click="isLoading = true"
+                @htmx:after-request="isLoading = false">
+            <span x-show="!isLoading">
+                <i class="fas fa-plus me-1"></i>Add Vacation
+            </span>
+            <span x-show="isLoading">
+                <i class="fas fa-spinner fa-spin me-1"></i>Loading...
+            </span>
+        </button>
+    </div>
 
-<!-- Success/Error Messages Container -->
-<div id="flash-messages"></div>
+    <!-- Success/Error Messages Container -->
+    <div id="flash-messages"></div>
 
-<!-- Form container for HTMX -->
-<div id="vacation-form-container" class="mb-4"></div>
+    <!-- Form container for HTMX -->
+    <div id="vacation-form-container" class="mb-4"></div>
 
-<div class="card">
-    <div class="card-body">
-        <div id="vacation-table">
-            {% include 'partials/vacation_table.html' %}
+    <div class="card">
+        <div class="card-body">
+            <div id="vacation-table">
+                {% include 'partials/vacation_table.html' %}
+            </div>
         </div>
     </div>
-</div>
 
 <div class="row mt-4">
     <div class="col-md-12">
@@ -60,136 +69,114 @@
             </div>
         </div>
     </div>
+
+    <!-- Success notification -->
+    <div x-show="showSuccessMessage" 
+         x-transition
+         class="position-fixed top-0 end-0 p-3" 
+         style="z-index: 1050;">
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle me-2"></i>
+            <span x-text="successMessage"></span>
+            <button type="button" class="btn-close" @click="hideSuccessMessage()"></button>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Function to auto-dismiss alerts after specified time
-function autoDismissAlert(alertElement, delay = 5000) {
-    setTimeout(() => {
-        if (alertElement && alertElement.parentNode) {
-            const bsAlert = new bootstrap.Alert(alertElement);
-            bsAlert.close();
-        }
-    }, delay);
-}
-
-// Function to show success messages
-function showSuccessMessage(message, autoDismiss = true) {
-    const flashContainer = document.getElementById('flash-messages');
-    const alertHtml = `
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <i class="fas fa-check-circle me-2"></i>${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    `;
-    flashContainer.innerHTML = alertHtml;
-    
-    // Auto-dismiss after 5 seconds if enabled
-    if (autoDismiss) {
-        const alert = flashContainer.querySelector('.alert');
-        if (alert) {
-            autoDismissAlert(alert, 5000);
-        }
-    }
-}
-
-// Function to show error messages
-function showErrorMessage(message, autoDismiss = true) {
-    const flashContainer = document.getElementById('flash-messages');
-    const alertHtml = `
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <i class="fas fa-exclamation-triangle me-2"></i>${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    `;
-    flashContainer.innerHTML = alertHtml;
-    
-    // Auto-dismiss after 7 seconds for errors (slightly longer to ensure users see them)
-    if (autoDismiss) {
-        const alert = flashContainer.querySelector('.alert');
-        if (alert) {
-            autoDismissAlert(alert, 7000);
-        }
-    }
-}
-
-// Function to show info messages
-function showInfoMessage(message, autoDismiss = true) {
-    const flashContainer = document.getElementById('flash-messages');
-    const alertHtml = `
-        <div class="alert alert-info alert-dismissible fade show" role="alert">
-            <i class="fas fa-info-circle me-2"></i>${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    `;
-    flashContainer.innerHTML = alertHtml;
-    
-    // Auto-dismiss after 5 seconds if enabled
-    if (autoDismiss) {
-        const alert = flashContainer.querySelector('.alert');
-        if (alert) {
-            autoDismissAlert(alert, 5000);
-        }
-    }
-}
-
-// Auto-dismiss existing flash messages on page load
-document.addEventListener('DOMContentLoaded', function() {
-    const existingAlerts = document.querySelectorAll('.alert-dismissible');
-    existingAlerts.forEach(alert => {
-        // Different timing based on alert type
-        let delay = 5000; // default
-        if (alert.classList.contains('alert-danger')) {
-            delay = 7000; // errors stay longer
-        } else if (alert.classList.contains('alert-warning')) {
-            delay = 6000; // warnings stay a bit longer
-        }
+document.addEventListener('alpine:init', () => {
+    Alpine.data('myVacations', () => ({
+        isLoading: false,
+        showSuccessMessage: false,
+        successMessage: '',
         
-        autoDismissAlert(alert, delay);
-    });
-});
-
-// Listen for HTMX events
-document.body.addEventListener('htmx:responseError', function(event) {
-    let errorMessage = 'An error occurred. Please try again.';
-    
-    // Try to extract the actual error message from the server response
-    if (event.detail.xhr && event.detail.xhr.responseText) {
-        try {
-            // Check if the response contains an alert div with error message
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = event.detail.xhr.responseText;
-            const alertDiv = tempDiv.querySelector('.alert');
+        init() {
+            // Listen for HTMX events
+            document.body.addEventListener('htmx:beforeRequest', () => {
+                this.isLoading = true;
+                // Clear any existing flash messages
+                document.getElementById('flash-messages').innerHTML = '';
+            });
             
-            if (alertDiv) {
-                // Extract text content, removing HTML tags and icons
-                const textContent = alertDiv.textContent || alertDiv.innerText;
-                if (textContent) {
-                    errorMessage = textContent.replace(/^\s*\S+\s*/, '').trim(); // Remove icon text
+            document.body.addEventListener('htmx:afterRequest', () => {
+                this.isLoading = false;
+            });
+            
+            document.body.addEventListener('htmx:responseError', (event) => {
+                this.handleError(event);
+            });
+            
+            // Listen for custom vacation events
+            document.body.addEventListener('vacationAdded', () => {
+                this.showSuccess('Vacation added successfully!');
+                // Clear the form
+                document.getElementById('vacation-form-container').innerHTML = '';
+            });
+            
+            document.body.addEventListener('vacationDeleted', () => {
+                this.showSuccess('Vacation deleted successfully!');
+            });
+        },
+        
+        showSuccess(message) {
+            this.successMessage = message;
+            this.showSuccessMessage = true;
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                this.hideSuccessMessage();
+            }, 3000);
+        },
+        
+        hideSuccessMessage() {
+            this.showSuccessMessage = false;
+        },
+        
+        handleError(event) {
+            let errorMessage = 'An error occurred. Please try again.';
+            
+            // Try to extract the actual error message from the server response
+            if (event.detail.xhr && event.detail.xhr.responseText) {
+                try {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = event.detail.xhr.responseText;
+                    const alertDiv = tempDiv.querySelector('.alert');
+                    
+                    if (alertDiv) {
+                        const textContent = alertDiv.textContent || alertDiv.innerText;
+                        if (textContent) {
+                            errorMessage = textContent.replace(/^\s*\S+\s*/, '').trim();
+                        }
+                    }
+                } catch (e) {
+                    console.log('Could not parse error response:', e);
                 }
             }
-        } catch (e) {
-            console.log('Could not parse error response:', e);
+            
+            this.showError(errorMessage);
+        },
+        
+        showError(message) {
+            const flashContainer = document.getElementById('flash-messages');
+            flashContainer.innerHTML = `
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            
+            // Auto-dismiss after 7 seconds
+            setTimeout(() => {
+                const alert = flashContainer.querySelector('.alert');
+                if (alert) {
+                    const bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                }
+            }, 7000);
         }
-    }
-    
-    showErrorMessage(errorMessage);
-});
-
-// Listen for successful vacation deletion
-document.body.addEventListener('vacationDeleted', function(event) {
-    showSuccessMessage('Vacation period deleted successfully!');
-});
-
-// Listen for HTMX before request to clear previous error messages
-document.body.addEventListener('htmx:beforeRequest', function(event) {
-    // Clear any existing flash messages before making a new request
-    const flashContainer = document.getElementById('flash-messages');
-    if (flashContainer) {
-        flashContainer.innerHTML = '';
-    }
+    }));
 });
 </script>
 {% endblock %}

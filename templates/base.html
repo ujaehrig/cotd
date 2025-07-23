@@ -67,12 +67,14 @@
     <div class="container mt-4">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
+                <div x-data="flashMessages()">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                </div>
             {% endif %}
         {% endwith %}
 
@@ -80,28 +82,34 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     
-    <!-- Auto-dismiss flash messages script -->
+    <!-- Auto-dismiss flash messages with Alpine.js -->
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Auto-dismiss flash messages after a few seconds
-        const alerts = document.querySelectorAll('.alert-dismissible');
-        alerts.forEach(function(alert) {
-            // Different timing based on alert type
-            let delay = 5000; // default for success/info
-            if (alert.classList.contains('alert-danger')) {
-                delay = 7000; // errors stay longer
-            } else if (alert.classList.contains('alert-warning')) {
-                delay = 6000; // warnings stay a bit longer
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('flashMessages', () => ({
+            init() {
+                // Auto-dismiss flash messages after a few seconds
+                const alerts = document.querySelectorAll('.alert-dismissible');
+                alerts.forEach((alert) => {
+                    // Different timing based on alert type
+                    let delay = 5000; // default for success/info
+                    if (alert.classList.contains('alert-danger')) {
+                        delay = 7000; // errors stay longer
+                    } else if (alert.classList.contains('alert-warning')) {
+                        delay = 6000; // warnings stay a bit longer
+                    }
+                    
+                    setTimeout(() => {
+                        if (alert && alert.parentNode) {
+                            const bsAlert = new bootstrap.Alert(alert);
+                            bsAlert.close();
+                        }
+                    }, delay);
+                });
             }
-            
-            setTimeout(function() {
-                if (alert && alert.parentNode) {
-                    const bsAlert = new bootstrap.Alert(alert);
-                    bsAlert.close();
-                }
-            }, delay);
-        });
+        }));
     });
     </script>
     

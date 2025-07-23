@@ -1,27 +1,40 @@
-<div class="card mb-4">
+<div class="card mb-4" x-data="addVacationModal()">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0"><i class="fas fa-plus me-2"></i>Add Vacation Period</h5>
         <button type="button" class="btn-close" 
-                onclick="document.getElementById('vacation-form-container').innerHTML = ''"
+                @click="closeForm()"
                 aria-label="Close"></button>
     </div>
     <div class="card-body">
-        <form id="vacation-form"
-              hx-post="{{ url_for('add_vacation') }}"
+        <form hx-post="{{ url_for('add_vacation') }}"
               hx-target="#vacation-table"
               hx-swap="innerHTML"
-              hx-on::after-request="if(event.detail.successful) { document.getElementById('vacation-form-container').innerHTML = ''; showSuccessMessage('Vacation period added successfully!'); }"
-              hx-on::response-error="handleFormError(event)">
+              hx-on::after-request="if(event.detail.successful) { closeForm(); }"
+              hx-on::response-error="handleFormError(event)"
+              @submit="handleSubmit($event)">
             
             <!-- Error message container -->
-            <div id="form-error-container"></div>
+            <div x-show="errorMessage" x-transition class="alert alert-danger" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <span x-text="errorMessage"></span>
+            </div>
+            
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label for="start_date" class="form-label">
                             <i class="fas fa-calendar-alt me-2"></i>Start Date
                         </label>
-                        <input type="date" name="start_date" id="start_date" class="form-control" required>
+                        <input type="date" 
+                               name="start_date" 
+                               id="start_date" 
+                               class="form-control"
+                               :class="{ 'is-invalid': startDateError }"
+                               x-model="startDate"
+                               :min="todayString"
+                               @change="validateDates()"
+                               required>
+                        <div x-show="startDateError" class="invalid-feedback" x-text="startDateError"></div>
                         <div class="form-text">The first day of the vacation period (today or future).</div>
                     </div>
                 </div>
@@ -30,7 +43,17 @@
                         <label for="end_date" class="form-label">
                             <i class="fas fa-calendar-check me-2"></i>End Date (Optional)
                         </label>
-                        <input type="date" name="end_date" id="end_date" class="form-control">
+                        <input type="date" 
+                               name="end_date" 
+                               id="end_date" 
+                               class="form-control"
+                               :class="{ 'is-invalid': endDateError }"
+                               x-model="endDate"
+                               :min="startDate || todayString"
+                               :disabled="isSingleDay"
+                               :style="{ opacity: isSingleDay ? '0.5' : '1' }"
+                               @change="validateDates()">
+                        <div x-show="endDateError" class="invalid-feedback" x-text="endDateError"></div>
                         <div class="form-text">Leave empty for single-day vacation.</div>
                     </div>
                 </div>
@@ -38,20 +61,42 @@
 
             <div class="mb-3">
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="singleDay" onchange="toggleSingleDay()">
+                    <input class="form-check-input" 
+                           type="checkbox" 
+                           id="singleDay" 
+                           x-model="isSingleDay"
+                           @change="handleSingleDayToggle()">
                     <label class="form-check-label" for="singleDay">
                         <i class="fas fa-calendar-day me-2"></i>Single day vacation
                     </label>
                 </div>
             </div>
 
-            <div class="d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-outline-secondary"
-                        onclick="document.getElementById('vacation-form-container').innerHTML = ''">
+            <!-- Vacation Summary -->
+            <div x-show="startDate" x-transition class="alert alert-info">
+                <h6><i class="fas fa-calendar-check me-2"></i>Vacation Summary</h6>
+                <div><strong>Start:</strong> <span x-text="formatDate(startDate)"></span></div>
+                <div x-show="endDate && !isSingleDay">
+                    <strong>End:</strong> <span x-text="formatDate(endDate)"></span>
+                </div>
+                <div><strong>Duration:</strong> <span x-text="vacationDuration"></span></div>
+                <div x-show="isSingleDay" class="text-muted">
+                    <i class="fas fa-info-circle me-1"></i>Single day vacation
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4 p-3 bg-light rounded">
+                <button type="button" 
+                        class="btn btn-outline-secondary btn-lg"
+                        @click="closeForm()">
                     <i class="fas fa-times me-1"></i>Cancel
                 </button>
-                <button type="button" class="btn btn-success" onclick="validateAndSubmit()">
-                    <i class="fas fa-plus me-1"></i>Add Vacation
+                <button type="submit" 
+                        class="btn btn-success btn-lg"
+                        :disabled="!isFormValid || isSubmitting"
+                        style="min-width: 160px; opacity: 1 !important;">
+                    <i class="fas fa-plus me-1"></i>
+                    Add Vacation
                 </button>
             </div>
         </form>
@@ -59,217 +104,132 @@
 </div>
 
 <script>
-// Validate and submit - only trigger HTMX request if validation passes
-function validateAndSubmit() {
-    const today = new Date().toISOString().split('T')[0];
-    const startDateInput = document.getElementById('start_date');
-    const endDateInput = document.getElementById('end_date');
-    const startDate = startDateInput.value;
-    const endDate = endDateInput.value;
-    
-    // Clear any previous error messages
-    const errorContainer = document.getElementById('form-error-container');
-    if (errorContainer) {
-        errorContainer.innerHTML = '';
-    }
-    
-    // Validate start date
-    if (!startDate) {
-        showFormError('Start date is required.');
-        return; // Don't submit
-    }
-    
-    if (startDate < today) {
-        showFormError('Start date cannot be in the past. Please select today or a future date.');
-        return; // Don't submit
-    }
-    
-    // Validate end date if provided
-    if (endDate) {
-        if (endDate < today) {
-            showFormError('End date cannot be in the past. Please select today or a future date.');
-            return; // Don't submit
-        }
+// Alpine.js component for the vacation form partial
+document.addEventListener('alpine:init', () => {
+    Alpine.data('addVacationModal', () => ({
+        startDate: '',
+        endDate: '',
+        isSingleDay: false,
+        isSubmitting: false,
+        errorMessage: '',
+        startDateError: '',
+        endDateError: '',
         
-        if (endDate < startDate) {
-            showFormError('End date cannot be before start date.');
-            return; // Don't submit
-        }
-    }
-    
-    // Check for overlapping vacations (client-side check)
-    if (checkForOverlaps(startDate, endDate || startDate)) {
-        return; // Don't submit if overlaps found
-    }
-    
-    // All validation passed - trigger HTMX request manually
-    const form = document.getElementById('vacation-form');
-    htmx.trigger(form, 'submit');
-}
-
-// Check for overlapping vacations on the client side
-function checkForOverlaps(newStartDate, newEndDate) {
-    // Get existing vacation dates from the vacation table
-    const vacationRows = document.querySelectorAll('#vacation-table tbody tr');
-    const existingVacations = [];
-    
-    vacationRows.forEach(row => {
-        const cells = row.querySelectorAll('td');
-        if (cells.length >= 2) {
-            const dateText = cells[1].textContent.trim();
+        init() {
+            // Initialize form state
+            console.log('Alpine.js addVacationModal initialized');
+            this.validateDates();
+        },
+        
+        get todayString() {
+            return new Date().toISOString().split('T')[0];
+        },
+        
+        get isFormValid() {
+            // More explicit validation logic
+            const hasStartDate = this.startDate && this.startDate.trim() !== '';
+            const noStartDateError = !this.startDateError || this.startDateError === '';
+            const noEndDateError = !this.endDateError || this.endDateError === '';
+            const noGeneralError = !this.errorMessage || this.errorMessage === '';
             
-            // Parse date range (could be "2025-01-01" or "2025-01-01 - 2025-01-05")
-            if (dateText.includes(' - ')) {
-                const [start, end] = dateText.split(' - ');
-                existingVacations.push({
-                    start: start.trim(),
-                    end: end.trim()
-                });
-            } else {
-                // Single day vacation
-                existingVacations.push({
-                    start: dateText,
-                    end: dateText
-                });
-            }
-        }
-    });
-    
-    // Check for exact duplicates
-    for (const vacation of existingVacations) {
-        if (vacation.start === newStartDate && vacation.end === newEndDate) {
-            if (newStartDate === newEndDate) {
-                showFormError(`You already have a vacation on ${newStartDate}`);
-            } else {
-                showFormError(`You already have a vacation from ${newStartDate} to ${newEndDate}`);
-            }
-            return true;
-        }
-    }
-    
-    // Check for overlaps
-    for (const vacation of existingVacations) {
-        // Two date ranges overlap if: start1 <= end2 AND start2 <= end1
-        if (newStartDate <= vacation.end && vacation.start <= newEndDate) {
-            let overlapMessage;
-            if (vacation.start === vacation.end) {
-                overlapMessage = `This vacation overlaps with your existing vacation: ${vacation.start}`;
-            } else {
-                overlapMessage = `This vacation overlaps with your existing vacation: ${vacation.start} to ${vacation.end}`;
-            }
-            showFormError(overlapMessage);
-            return true;
-        }
-    }
-    
-    return false; // No overlaps found
-}
-
-// Validate before HTMX request to prevent server requests with invalid data
-function validateBeforeHTMXRequest(event) {
-    const today = new Date().toISOString().split('T')[0];
-    const startDateInput = document.getElementById('start_date');
-    const endDateInput = document.getElementById('end_date');
-    const startDate = startDateInput.value;
-    const endDate = endDateInput.value;
-    
-    // Clear any previous error messages
-    const errorContainer = document.getElementById('form-error-container');
-    if (errorContainer) {
-        errorContainer.innerHTML = '';
-    }
-    
-    // Validate start date
-    if (!startDate) {
-        showFormError('Start date is required.');
-        event.preventDefault(); // Prevent HTMX request
-        return false;
-    }
-    
-    if (startDate < today) {
-        showFormError('Start date cannot be in the past. Please select today or a future date.');
-        event.preventDefault(); // Prevent HTMX request
-        return false;
-    }
-    
-    // Validate end date if provided
-    if (endDate) {
-        if (endDate < today) {
-            showFormError('End date cannot be in the past. Please select today or a future date.');
-            event.preventDefault(); // Prevent HTMX request
-            return false;
-        }
+            return hasStartDate && noStartDateError && noEndDateError && noGeneralError;
+        },
         
-        if (endDate < startDate) {
-            showFormError('End date cannot be before start date.');
-            event.preventDefault(); // Prevent HTMX request
-            return false;
-        }
-    }
-    
-    // All validation passed, allow HTMX request
-    return true;
-}
-
-// Validate form before submission to prevent server requests with invalid data (fallback for non-HTMX)
-function validateFormBeforeSubmit(event) {
-    const today = new Date().toISOString().split('T')[0];
-    const startDateInput = document.getElementById('start_date');
-    const endDateInput = document.getElementById('end_date');
-    const startDate = startDateInput.value;
-    const endDate = endDateInput.value;
-    
-    // Clear any previous error messages
-    const errorContainer = document.getElementById('form-error-container');
-    if (errorContainer) {
-        errorContainer.innerHTML = '';
-    }
-    
-    // Validate start date
-    if (!startDate) {
-        showFormError('Start date is required.');
-        return false; // Prevent form submission
-    }
-    
-    if (startDate < today) {
-        showFormError('Start date cannot be in the past. Please select today or a future date.');
-        return false; // Prevent form submission
-    }
-    
-    // Validate end date if provided
-    if (endDate) {
-        if (endDate < today) {
-            showFormError('End date cannot be in the past. Please select today or a future date.');
-            return false; // Prevent form submission
-        }
+        get vacationDuration() {
+            if (!this.startDate) return '';
+            
+            if (this.isSingleDay || !this.endDate) {
+                return '1 day';
+            }
+            
+            const start = new Date(this.startDate);
+            const end = new Date(this.endDate);
+            const diffTime = Math.abs(end - start);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            
+            return `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+        },
         
-        if (endDate < startDate) {
-            showFormError('End date cannot be before start date.');
-            return false; // Prevent form submission
+        formatDate(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+        },
+        
+        validateDates() {
+            this.errorMessage = '';
+            this.startDateError = '';
+            this.endDateError = '';
+            
+            // Validate start date
+            if (this.startDate && this.startDate < this.todayString) {
+                this.startDateError = 'Start date cannot be in the past';
+                return;
+            }
+            
+            // Validate end date
+            if (this.endDate) {
+                if (this.endDate < this.todayString) {
+                    this.endDateError = 'End date cannot be in the past';
+                    return;
+                }
+                
+                if (this.startDate && this.endDate < this.startDate) {
+                    this.endDateError = 'End date cannot be before start date';
+                    return;
+                }
+            }
+        },
+        
+        handleSingleDayToggle() {
+            if (this.isSingleDay) {
+                this.endDate = '';
+                this.endDateError = '';
+            }
+            this.validateDates();
+        },
+        
+        handleSubmit(event) {
+            // Validate before submission
+            this.validateDates();
+            
+            if (!this.isFormValid) {
+                event.preventDefault();
+                if (!this.errorMessage && !this.startDateError && !this.endDateError) {
+                    this.errorMessage = 'Please fill in all required fields correctly';
+                }
+                return false;
+            }
+            
+            this.isSubmitting = true;
+            return true;
+        },
+        
+        closeForm() {
+            document.getElementById('vacation-form-container').innerHTML = '';
         }
-    }
-    
-    // All validation passed, allow form submission
-    return true;
-}
+    }));
+});
 
-// Handle form-specific errors
+// Handle form errors from HTMX
 function handleFormError(event) {
     let errorMessage = 'An error occurred. Please try again.';
     
-    // Try to extract the actual error message from the server response
     if (event.detail.xhr && event.detail.xhr.responseText) {
         try {
-            // Check if the response contains an alert div with error message
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = event.detail.xhr.responseText;
             const alertDiv = tempDiv.querySelector('.alert');
             
             if (alertDiv) {
-                // Extract text content, removing HTML tags and icons
                 const textContent = alertDiv.textContent || alertDiv.innerText;
                 if (textContent) {
-                    errorMessage = textContent.replace(/^\s*\S+\s*/, '').trim(); // Remove icon text
+                    errorMessage = textContent.replace(/^\s*\S+\s*/, '').trim();
                 }
             }
         } catch (e) {
@@ -277,105 +237,11 @@ function handleFormError(event) {
         }
     }
     
-    // Show error in the form
-    showFormError(errorMessage);
-}
-
-// Function to show errors within the form
-function showFormError(message) {
-    const errorContainer = document.getElementById('form-error-container');
-    if (errorContainer) {
-        const alertHtml = `
-            <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
-                <i class="fas fa-exclamation-triangle me-2"></i>${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        `;
-        errorContainer.innerHTML = alertHtml;
-        
-        // Auto-dismiss after 7 seconds
-        setTimeout(() => {
-            const alert = errorContainer.querySelector('.alert');
-            if (alert) {
-                const bsAlert = new bootstrap.Alert(alert);
-                bsAlert.close();
-            }
-        }, 7000);
+    // Find the Alpine component and set the error
+    const formContainer = document.querySelector('[x-data*="addVacationModal"]');
+    if (formContainer && formContainer._x_dataStack) {
+        formContainer._x_dataStack[0].errorMessage = errorMessage;
+        formContainer._x_dataStack[0].isSubmitting = false;
     }
 }
-
-function toggleSingleDay() {
-    const singleDayCheckbox = document.getElementById('singleDay');
-    const endDateInput = document.getElementById('end_date');
-    
-    if (singleDayCheckbox.checked) {
-        endDateInput.disabled = true;
-        endDateInput.value = '';
-        endDateInput.style.opacity = '0.5';
-    } else {
-        endDateInput.disabled = false;
-        endDateInput.style.opacity = '1';
-    }
-}
-
-// Set minimum date to today and add validation
-// Run immediately since this is loaded dynamically via HTMX
-(function() {
-    const today = new Date().toISOString().split('T')[0];
-    const startDateInput = document.getElementById('start_date');
-    const endDateInput = document.getElementById('end_date');
-    
-    if (startDateInput) {
-        // Set minimum date to today (no past dates allowed)
-        startDateInput.min = today;
-        
-        // Update end date minimum when start date changes
-        startDateInput.addEventListener('change', function() {
-            const selectedStartDate = this.value;
-            
-            // Clear any previous error messages
-            const errorContainer = document.getElementById('form-error-container');
-            if (errorContainer) {
-                errorContainer.innerHTML = '';
-            }
-            
-            // Validate start date is not in the past (backup validation)
-            if (selectedStartDate < today) {
-                this.value = today;
-                showFormError('Start date cannot be in the past. Setting to today.');
-                return;
-            }
-            
-            // Update end date minimum to match start date
-            endDateInput.min = selectedStartDate;
-            
-            // If end date is before start date, clear it
-            if (endDateInput.value && endDateInput.value < selectedStartDate) {
-                endDateInput.value = '';
-                showFormError('End date cleared because it was before the new start date.');
-            }
-        });
-    }
-    
-    if (endDateInput) {
-        endDateInput.min = today;
-        
-        // Validate end date when changed
-        endDateInput.addEventListener('change', function() {
-            const startDate = startDateInput.value;
-            const endDate = this.value;
-            
-            // Clear any previous error messages
-            const errorContainer = document.getElementById('form-error-container');
-            if (errorContainer) {
-                errorContainer.innerHTML = '';
-            }
-            
-            if (startDate && endDate && endDate < startDate) {
-                this.value = '';
-                showFormError('End date cannot be before start date.');
-            }
-        });
-    }
-})();
 </script>
