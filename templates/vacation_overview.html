@@ -51,9 +51,6 @@
             <a href="{{ url_for('my_vacations') }}" class="btn btn-outline-primary">
                 <i class="fas fa-user me-1"></i>My Vacations
             </a>
-            <button class="btn btn-outline-secondary" onclick="toggleView()">
-                <i class="fas fa-th-list me-1"></i><span id="view-toggle-text">Calendar View</span>
-            </button>
         </div>
     </div>
 
@@ -158,10 +155,7 @@
                                     {% if vacation.end_date < today %}vacation-status-past
                                     {% elif vacation.start_date <= today and vacation.end_date >= today %}vacation-status-active
                                     {% else %}vacation-status-upcoming{% endif %}"
-                                    data-vacation-status="
-                                    {% if vacation.end_date < today %}past
-                                    {% elif vacation.start_date <= today and vacation.end_date >= today %}active
-                                    {% else %}upcoming{% endif %}"
+                                    data-vacation-status="{% if vacation.end_date < today %}past{% elif vacation.start_date <= today and vacation.end_date >= today %}active{% else %}upcoming{% endif %}"
                                     data-vacation-month="{{ vacation.start_date[:7] }}"
                                     id="vacation-card-{{ vacation.id }}">
                                     
@@ -390,18 +384,6 @@ function filterUsers() {
     });
     
     updateStatistics();
-}
-
-// Toggle view (placeholder for future calendar view)
-function toggleView() {
-    const toggleText = document.getElementById('view-toggle-text');
-    if (toggleText.textContent === 'Calendar View') {
-        toggleText.textContent = 'List View';
-        // TODO: Implement calendar view
-        alert('Calendar view coming soon!');
-    } else {
-        toggleText.textContent = 'Calendar View';
-    }
 }
 
 // Initialize statistics on page load

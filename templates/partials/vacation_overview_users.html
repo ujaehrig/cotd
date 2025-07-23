@@ -20,10 +20,7 @@
                         {% if vacation.end_date < today %}vacation-status-past
                         {% elif vacation.start_date <= today and vacation.end_date >= today %}vacation-status-active
                         {% else %}vacation-status-upcoming{% endif %}"
-                        data-vacation-status="
-                        {% if vacation.end_date < today %}past
-                        {% elif vacation.start_date <= today and vacation.end_date >= today %}active
-                        {% else %}upcoming{% endif %}"
+                        data-vacation-status="{% if vacation.end_date < today %}past{% elif vacation.start_date <= today and vacation.end_date >= today %}active{% else %}upcoming{% endif %}"
                         data-vacation-month="{{ vacation.start_date[:7] }}"
                         id="vacation-card-{{ vacation.id }}">
                         

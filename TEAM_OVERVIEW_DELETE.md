@@ -164,17 +164,18 @@ function updateStatistics() {
 ## Future Enhancements
 
 ### **Potential Additions**
-1. **Bulk Delete**: Select multiple vacations for deletion
-2. **Edit in Place**: Quick edit functionality on hover
-3. **Drag & Drop**: Reorder or move vacation periods
-4. **Calendar Integration**: Visual calendar view with delete functionality
-5. **Undo Functionality**: Temporary undo option after deletion
+1. **Calendar View**: Visual calendar display of team vacations
+2. **Bulk Delete**: Select multiple vacations for deletion
+3. **Edit in Place**: Quick edit functionality on hover
+4. **Drag & Drop**: Reorder or move vacation periods
+5. **Export Options**: Export team vacation schedules
 
 ### **Advanced Features**
 1. **Real-time Updates**: WebSocket integration for live team updates
 2. **Conflict Detection**: Warn about team scheduling conflicts
-3. **Export Options**: Export team vacation schedules
-4. **Notification System**: Email notifications for team changes
+3. **Notification System**: Email notifications for team changes
+4. **Calendar Integration**: Integration with external calendar systems (Google, Outlook)
+5. **Mobile App**: Dedicated mobile application for vacation management
 
 ## Testing Considerations
 
