@@ -6,7 +6,8 @@
 #     "flask-login>=0.6.0",
 #     "werkzeug>=2.3.0",
 #     "requests>=2.25.0",
-#     "python-dotenv>=1.0.0"
+#     "python-dotenv>=1.0.0",
+#     "gunicorn>=21.0.0"
 # ]
 # ///
 
@@ -819,6 +820,29 @@ def reset_password():
 def forgot_password():
     """Redirect to reset password page."""
     return redirect(url_for("reset_password"))
+
+
+@app.route("/health")
+def health_check():
+    """Health check endpoint for Docker and load balancers"""
+    try:
+        # Test database connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "version": "1.0.0"
+        }, 200
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }, 503
 
 
 if __name__ == "__main__":
