@@ -46,10 +46,29 @@ DB_PATH=/path/to/user.db
 # Holiday API settings (optional)
 HOLIDAY_API_URL=https://date.nager.at/Api/v3/IsTodayPublicHoliday/DE?countyCode=DE-BW
 HOLIDAY_API_TIMEOUT=5
+HOLIDAY_REGION=BW  # German state code for fallback holiday detection (BW=Baden-Württemberg)
 
 # Slack API timeout in seconds (optional)
 SLACK_API_TIMEOUT=10
 ```
+
+**Holiday Region Codes**: The `HOLIDAY_REGION` setting uses German state codes for the fallback holiday library. Common codes include:
+- `BW` - Baden-Württemberg (default)
+- `BY` - Bayern (Bavaria)
+- `BE` - Berlin
+- `BB` - Brandenburg
+- `HB` - Bremen
+- `HH` - Hamburg
+- `HE` - Hessen
+- `MV` - Mecklenburg-Vorpommern
+- `NI` - Niedersachsen
+- `NW` - Nordrhein-Westfalen
+- `RP` - Rheinland-Pfalz
+- `SL` - Saarland
+- `SN` - Sachsen
+- `ST` - Sachsen-Anhalt
+- `SH` - Schleswig-Holstein
+- `TH` - Thüringen
 
 ## Managing Vacation Periods
 
