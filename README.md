@@ -6,7 +6,7 @@ You need to set up the workflow in Slack via the workflow builder. Choose a webh
 
 The script will call the triggering webhook and send an email address as parameter. The email address is chosen from the database. The script chooses the address by a fairness strategy based on which address was not chosen for the longest time.
 
-The script will also take vacation times and holidays into consideration. 
+The script will also take vacation times and holidays into consideration. Holiday checking uses a fallback system: it first tries the configured web service API, and if that fails, it falls back to Python's `holidays` library for offline holiday detection. 
 
 ## Installation
 
