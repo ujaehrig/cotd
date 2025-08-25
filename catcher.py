@@ -97,18 +97,42 @@ def is_weekend() -> bool:
 def is_holiday() -> bool:
     """
     Check if today is a public holiday in Germany (Baden-Württemberg).
+    First tries the web service API, then falls back to the holidays library.
 
     Returns:
         bool: True if today is a public holiday, False otherwise
     """
+    # First try the web service
     try:
         response = requests.get(HOLIDAY_API_URL, timeout=HOLIDAY_TIMEOUT)
         if response.status_code == 200:
-            logging.info("Holiday detected")
+            logging.info("Holiday detected via web service")
             return True
-        return False
+        elif response.status_code == 204:
+            # 204 typically means "no holiday today"
+            logging.debug("No holiday today (web service)")
+            return False
+        else:
+            logging.warning(f"Web service returned unexpected status: {response.status_code}")
     except requests.exceptions.RequestException as e:
-        logging.error(f"Failed to check holiday status: {e}")
+        logging.warning(f"Web service failed, falling back to holidays library: {e}")
+    
+    # Fallback to holidays library
+    try:
+        # Create holidays object for Germany, Baden-Württemberg
+        german_holidays = holidays.Germany(state='BW')
+        today = datetime.date.today()
+        
+        if today in german_holidays:
+            holiday_name = german_holidays.get(today)
+            logging.info(f"Holiday detected via fallback library: {holiday_name}")
+            return True
+        else:
+            logging.debug("No holiday today (fallback library)")
+            return False
+    except Exception as e:
+        logging.error(f"Both holiday checking methods failed: {e}")
+        # When in doubt, assume it's not a holiday to avoid missing work days
         return False
 
 
