@@ -59,6 +59,7 @@ HOLIDAY_API_URL = os.environ.get(
     "https://date.nager.at/Api/v3/IsTodayPublicHoliday/DE?countyCode=DE-BW",
 )
 HOLIDAY_TIMEOUT = int(os.environ.get("HOLIDAY_API_TIMEOUT", "5"))  # seconds
+HOLIDAY_REGION = os.environ.get("HOLIDAY_REGION", "BW")  # German state code
 SLACK_TIMEOUT = int(os.environ.get("SLACK_API_TIMEOUT", "10"))  # seconds
 
 
@@ -119,16 +120,16 @@ def is_holiday() -> bool:
     
     # Fallback to holidays library
     try:
-        # Create holidays object for Germany, Baden-Württemberg
-        german_holidays = holidays.Germany(state='BW')
+        # Create holidays object for Germany with configurable state
+        german_holidays = holidays.Germany(state=HOLIDAY_REGION)
         today = datetime.date.today()
         
         if today in german_holidays:
             holiday_name = german_holidays.get(today)
-            logging.info(f"Holiday detected via fallback library: {holiday_name}")
+            logging.info(f"Holiday detected via fallback library ({HOLIDAY_REGION}): {holiday_name}")
             return True
         else:
-            logging.debug("No holiday today (fallback library)")
+            logging.debug(f"No holiday today (fallback library, {HOLIDAY_REGION})")
             return False
     except Exception as e:
         logging.error(f"Both holiday checking methods failed: {e}")
