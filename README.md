@@ -4,9 +4,19 @@ Simple script to trigger a workflow in Slack, which will show a catcher of the d
 
 You need to set up the workflow in Slack via the workflow builder. Choose a webhook as trigger. 
 
-The script will call the triggering webhook and send an email address as parameter. The email address is chosen from the database. The script chooses the address by a fairness strategy based on which address was not chosen for the longest time.
+The script will call the triggering webhook and send an email address as parameter. The email address is chosen from the database using an advanced weighted selection algorithm that ensures fairness while avoiding consecutive day assignments when possible.
 
-The script will also take vacation times and holidays into consideration. 
+The script will also take vacation times and holidays into consideration.
+
+## Selection Algorithm
+
+The system uses a sophisticated weighted selection algorithm that:
+- Ensures fair distribution of duties over time
+- Avoids consecutive day assignments when alternatives exist  
+- Balances workload based on recent selection frequency
+- Handles ties intelligently with deterministic tie-breaking
+
+For detailed information about the algorithm, see [WEIGHTED_ALGORITHM.md](WEIGHTED_ALGORITHM.md).
 
 ## Installation
 
