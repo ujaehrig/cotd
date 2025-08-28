@@ -287,6 +287,7 @@ def cleanup_old_selection_history(conn: sqlite3.Connection, retention_days: int 
         logging.warning(f"Failed to clean up old selection history: {e}")
 
 
+def is_user_on_vacation(conn: sqlite3.Connection, user_id: int, date: str) -> bool:
     """
     Check if a user is on vacation on a specific date.
 
