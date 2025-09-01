@@ -7,17 +7,29 @@ The enhanced Catcher of the Day system uses a sophisticated weighted selection a
 ## Algorithm Goals
 
 1. **Fairness**: Distribute catcher duties evenly over time
-2. **Avoid Consecutive Days**: Prevent the same person being selected two days in a row (when alternatives exist)
+2. **Avoid Consecutive Working Days**: Prevent the same person being selected on consecutive working days (when alternatives exist)
 3. **Balance Workload**: Consider recent selection frequency
 4. **Predictable Tie-Breaking**: Handle equal weights deterministically
 5. **Flexibility**: Gracefully handle edge cases (vacations, single available user, etc.)
+
+## Working Day Logic
+
+The algorithm now considers **working days** instead of calendar days when avoiding consecutive assignments:
+
+- **Working Days**: Monday through Friday, excluding public holidays
+- **Holiday Detection**: Uses German holidays for the configured region (default: Baden-Württemberg)
+- **Lookback Period**: Searches up to 7 days back to find the last working day with a selection
+- **Weekend Handling**: Automatically skips Saturday and Sunday
+- **Holiday Handling**: Automatically skips detected public holidays
+
+This ensures that if someone was selected on Friday, they won't be selected again on the following Monday (assuming alternatives exist).
 
 ## Weight Calculation Formula
 
 Each eligible user receives a weight calculated as:
 
 ```
-weight = BASE_WEIGHT + days_since_last_selection - yesterday_penalty - frequency_penalty
+weight = BASE_WEIGHT + days_since_last_selection - last_working_day_penalty - frequency_penalty
 ```
 
 ### Components
@@ -26,14 +38,14 @@ weight = BASE_WEIGHT + days_since_last_selection - yesterday_penalty - frequency
 |-----------|-------|-------------|
 | `BASE_WEIGHT` | 100 | Starting weight for all users |
 | `days_since_last_selection` | +1 per day | Encourages selecting users who haven't been chosen recently |
-| `yesterday_penalty` | -50 | Applied only if user was selected yesterday AND alternatives exist |
+| `last_working_day_penalty` | -50 | Applied only if user was selected on the last working day AND alternatives exist |
 | `frequency_penalty` | -5 per selection | Based on selections in last 30 days |
 
 ### Special Cases
 
 - **Never Selected**: Users with no `last_chosen` date get +365 bonus
 - **Minimum Weight**: All weights are clamped to minimum value of 1
-- **No Alternatives**: Yesterday penalty is NOT applied if only one user is available
+- **No Alternatives**: Last working day penalty is NOT applied if only one user is available
 
 ## Tie-Breaking Logic
 
@@ -63,7 +75,7 @@ Available Users = Users where:
 ### 2. Weight Calculation
 For each available user:
 - Calculate base weight using formula above
-- Apply yesterday penalty if applicable
+- Apply last working day penalty if applicable
 - Apply frequency penalty based on recent selections
 
 ### 3. Tie-Breaking
@@ -94,14 +106,14 @@ Charlie: 100 + 365 + 0 - (0 × 5) = 465
 
 **Result:** Charlie most likely (465/557 ≈ 83%), Bob second (97/557 ≈ 17%), Alice least likely (95/557 ≈ 17%)
 
-### Example 2: Yesterday Penalty
+### Example 2: Last Working Day Penalty
 
-**Scenario:** Bob was selected yesterday, alternatives exist
+**Scenario:** Bob was selected on the last working day, alternatives exist
 
 **Weight Calculations:**
 ```
 Alice:   100 + 5 + 0 - (2 × 5) = 95
-Bob:     100 + 2 - 50 - (1 × 5) = 47  (yesterday penalty applied)
+Bob:     100 + 2 - 50 - (1 × 5) = 47  (last working day penalty applied)
 Charlie: 100 + 365 + 0 - (0 × 5) = 465
 ```
 
@@ -123,11 +135,11 @@ Charlie: 100 + 365 + 0 - (0 × 5) = 465
 
 ### Example 4: Edge Case - Only One User Available
 
-**Scenario:** Only Bob available, he was selected yesterday
+**Scenario:** Only Bob available, he was selected on the last working day
 
 **Weight Calculation:**
 ```
-Bob: 100 + 2 + 0 - (1 × 5) = 97  (NO yesterday penalty - no alternatives)
+Bob: 100 + 2 + 0 - (1 × 5) = 97  (NO last working day penalty - no alternatives)
 ```
 
 **Result:** Bob selected (bad luck, but unavoidable)
@@ -180,7 +192,7 @@ All parameters can be adjusted by modifying constants in the script:
 
 ```python
 BASE_WEIGHT = 100                    # Starting weight for all users
-YESTERDAY_PENALTY = 50               # Penalty for consecutive days
+LAST_WORKING_DAY_PENALTY = 50        # Penalty for consecutive working days
 FREQUENCY_PENALTY_MULTIPLIER = 5     # Penalty per recent selection
 LOOKBACK_DAYS = 30                   # Days to consider for frequency penalty
 ```
@@ -199,7 +211,7 @@ LOOKBACK_DAYS = 30                   # Days to consider for frequency penalty
 
 ### Flexibility
 - Gracefully handles edge cases (single user, all on vacation, etc.)
-- Yesterday penalty only applied when alternatives exist
+- Last working day penalty only applied when alternatives exist
 - Minimum weight ensures all users remain selectable
 
 ### Performance
@@ -234,9 +246,9 @@ python test_weighted_algorithm.py
 The `--debug-weights` flag shows detailed information:
 ```
 Weight calculations for all eligible users:
-  alice@example.com: weight=95.100, last_chosen=2025-08-20, recent_selections=2, is_yesterday=False, tie_breaker=+0.100
-  bob@example.com: weight=95.050, last_chosen=2025-08-22, recent_selections=1, is_yesterday=False, tie_breaker=+0.050
-  charlie@example.com: weight=465.000, last_chosen=None, recent_selections=0, is_yesterday=False
+  alice@example.com: weight=95.100, last_chosen=2025-08-20, recent_selections=2, is_last_working_day=False, tie_breaker=+0.100
+  bob@example.com: weight=95.050, last_chosen=2025-08-22, recent_selections=1, is_last_working_day=False, tie_breaker=+0.050
+  charlie@example.com: weight=465.000, last_chosen=None, recent_selections=0, is_last_working_day=False
 ```
 
 ## Comparison with Previous Algorithm

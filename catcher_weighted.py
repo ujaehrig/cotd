@@ -318,32 +318,55 @@ def is_user_on_vacation(conn: sqlite3.Connection, user_id: int, date: str) -> bo
         return False
 
 
-def get_yesterday_catcher(conn: sqlite3.Connection) -> Optional[int]:
+def get_last_working_day_catcher(conn: sqlite3.Connection) -> Optional[int]:
     """
-    Get the user ID of yesterday's catcher.
+    Get the user ID of the last working day's catcher (skipping weekends and holidays).
 
     Args:
         conn: Database connection
 
     Returns:
-        Optional[int]: User ID of yesterday's catcher, or None if no one was selected
+        Optional[int]: User ID of the last working day's catcher, or None if no one was selected
     """
     try:
-        yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT user_id 
-            FROM selection_history 
-            WHERE selected_date = ?
-        """,
-            (yesterday,),
-        )
         
-        result = cursor.fetchone()
-        return result[0] if result else None
+        # Look back up to 7 days to find the last working day with a selection
+        for days_back in range(1, 8):
+            check_date = datetime.date.today() - datetime.timedelta(days=days_back)
+            
+            # Skip weekends
+            if check_date.weekday() >= 5:  # Saturday or Sunday
+                continue
+                
+            # Check if it was a holiday
+            try:
+                # Check with holidays library
+                german_holidays = holidays.Germany(state=HOLIDAY_REGION)
+                if check_date in german_holidays:
+                    continue
+            except Exception:
+                # If holiday check fails, assume it wasn't a holiday
+                pass
+            
+            # Check if someone was selected on this working day
+            cursor.execute(
+                """
+                SELECT user_id 
+                FROM selection_history 
+                WHERE selected_date = ?
+            """,
+                (check_date.isoformat(),),
+            )
+            
+            result = cursor.fetchone()
+            if result:
+                return result[0]
+        
+        # No catcher found in the last 7 working days
+        return None
     except sqlite3.Error as e:
-        logging.error(f"Error getting yesterday's catcher: {e}")
+        logging.error(f"Error getting last working day's catcher: {e}")
         return None
 
 
@@ -467,7 +490,7 @@ def add_tie_breaking_logic(weighted_users: List[Dict]) -> List[Dict]:
 def calculate_user_weight(
     user_id: int, 
     last_chosen: Optional[str], 
-    yesterday_catcher_id: Optional[int],
+    last_working_day_catcher_id: Optional[int],
     recent_selections: int,
     has_alternatives: bool
 ) -> float:
@@ -477,7 +500,7 @@ def calculate_user_weight(
     Args:
         user_id: User ID
         last_chosen: Last chosen date (ISO format) or None
-        yesterday_catcher_id: User ID of yesterday's catcher
+        last_working_day_catcher_id: User ID of the last working day's catcher
         recent_selections: Number of recent selections
         has_alternatives: Whether there are other available users
 
@@ -499,8 +522,8 @@ def calculate_user_weight(
         # Never selected - give high bonus
         weight += 365
     
-    # Apply yesterday penalty (only if alternatives exist)
-    if has_alternatives and yesterday_catcher_id == user_id:
+    # Apply penalty for being selected on the last working day (only if alternatives exist)
+    if has_alternatives and last_working_day_catcher_id == user_id:
         weight -= YESTERDAY_PENALTY
     
     # Apply frequency penalty
@@ -569,12 +592,12 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
                 logging.warning("No available users found for today (all on vacation or not scheduled)")
                 return None, False
 
-            # Get yesterday's catcher
-            yesterday_catcher_id = get_yesterday_catcher(conn)
+            # Get last working day's catcher
+            last_working_day_catcher_id = get_last_working_day_catcher(conn)
             
-            # Check if we have alternatives to yesterday's catcher
+            # Check if we have alternatives to last working day's catcher
             has_alternatives = len(available_users) > 1 or (
-                len(available_users) == 1 and available_users[0]["id"] != yesterday_catcher_id
+                len(available_users) == 1 and available_users[0]["id"] != last_working_day_catcher_id
             )
 
             # Calculate weights for all available users
@@ -584,7 +607,7 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
                 weight = calculate_user_weight(
                     user["id"],
                     user["last_chosen"],
-                    yesterday_catcher_id,
+                    last_working_day_catcher_id,
                     recent_selections,
                     has_alternatives
                 )
@@ -593,7 +616,7 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
                     "user": user,
                     "weight": weight,
                     "recent_selections": recent_selections,
-                    "is_yesterday": user["id"] == yesterday_catcher_id
+                    "is_yesterday": user["id"] == last_working_day_catcher_id
                 })
 
             # Apply tie-breaking logic for users with equal weights
@@ -613,7 +636,7 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
                         f"  {user['mail']}: weight={wu['weight']:.3f}, "
                         f"last_chosen={user['last_chosen']}, "
                         f"recent_selections={wu['recent_selections']}, "
-                        f"is_yesterday={wu['is_yesterday']}{tie_info}"
+                        f"is_last_working_day={wu['is_yesterday']}{tie_info}"
                     )
 
             # Weighted random selection using improved algorithm
