@@ -1,11 +1,22 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+
+# /// script
+# dependencies = [
+#    "python-dotenv>=1.0.0",
+# ]
+# ///
 
 import sqlite3
 import argparse
 import logging
 import sys
+import os
 from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -13,11 +24,16 @@ logging.basicConfig(
 )
 
 # Database path
-DATABASE_PATH = Path(__file__).parent / "user.db"
+DATABASE_PATH = Path(__file__).parent / os.getenv("DB_PATH", "user.db")
 
 
 def get_db_connection() -> sqlite3.Connection:
     """Create and return a database connection."""
+    if not DATABASE_PATH.exists():
+        logging.error(f"Database file not found: {DATABASE_PATH}")
+        logging.error("Run setup.sh or create the database first")
+        sys.exit(1)
+
     try:
         conn = sqlite3.connect(DATABASE_PATH)
         conn.row_factory = sqlite3.Row
@@ -45,11 +61,11 @@ def get_user_id_by_email(email: str) -> int:
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM user WHERE mail = ?", (email,))
             user = cursor.fetchone()
-            
+
             if not user:
                 logging.error(f"User with email '{email}' not found.")
                 sys.exit(1)
-            
+
             return user['id']
     except sqlite3.Error as e:
         logging.error(f"Error looking up user: {e}")
@@ -148,7 +164,7 @@ def list_vacations(user_identifier=None):
 def add_vacation(user_identifier, start_date, end_date=None):
     """
     Add a new vacation period for a user.
-    
+
     user_identifier can be either a user ID (int) or email address (str).
     If end_date is not provided, it will be set to the same as start_date (single day vacation).
     """
@@ -158,10 +174,10 @@ def add_vacation(user_identifier, start_date, end_date=None):
     else:
         # It's an email address
         user_id = get_user_id_by_email(user_identifier)
-    
+
     # Validate start date
     start = validate_date(start_date)
-    
+
     # If end_date is not provided, use start_date (single day vacation)
     if end_date is None:
         end = start
@@ -196,7 +212,7 @@ def add_vacation(user_identifier, start_date, end_date=None):
             )
 
             conn.commit()
-            
+
             if single_day:
                 logging.info(f"Single day vacation added for {user['mail']} on {start}")
             else:
