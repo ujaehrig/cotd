@@ -100,8 +100,8 @@ def list_users():
         sys.exit(1)
 
 
-def list_vacations(user_identifier=None):
-    """List all vacation periods, optionally filtered by user ID or email."""
+def list_vacations(user_identifier=None, show_all=False):
+    """List vacation periods, optionally filtered by user ID or email."""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -123,24 +123,45 @@ def list_vacations(user_identifier=None):
                     user = cursor.fetchone()
 
                 print(f"\nVacation periods for user: {user['mail']}")
-                cursor.execute(
-                    """
-                    SELECT v.id, u.mail, v.start_date, v.end_date
-                    FROM vacation v
-                    JOIN user u ON v.user_id = u.id
-                    WHERE v.user_id = ?
-                    ORDER BY v.start_date
-                """,
-                    (user_id,),
-                )
+                if show_all:
+                    cursor.execute(
+                        """
+                        SELECT v.id, u.mail, v.start_date, v.end_date
+                        FROM vacation v
+                        JOIN user u ON v.user_id = u.id
+                        WHERE v.user_id = ?
+                        ORDER BY v.start_date
+                    """,
+                        (user_id,),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT v.id, u.mail, v.start_date, v.end_date
+                        FROM vacation v
+                        JOIN user u ON v.user_id = u.id
+                        WHERE v.user_id = ? AND v.end_date >= date('now')
+                        ORDER BY v.start_date
+                    """,
+                        (user_id,),
+                    )
             else:
                 print("\nAll vacation periods:")
-                cursor.execute("""
-                    SELECT v.id, u.mail, v.start_date, v.end_date
-                    FROM vacation v
-                    JOIN user u ON v.user_id = u.id
-                    ORDER BY v.start_date, u.mail
-                """)
+                if show_all:
+                    cursor.execute("""
+                        SELECT v.id, u.mail, v.start_date, v.end_date
+                        FROM vacation v
+                        JOIN user u ON v.user_id = u.id
+                        ORDER BY v.start_date, u.mail
+                    """)
+                else:
+                    cursor.execute("""
+                        SELECT v.id, u.mail, v.start_date, v.end_date
+                        FROM vacation v
+                        JOIN user u ON v.user_id = u.id
+                        WHERE v.end_date >= date('now')
+                        ORDER BY v.start_date, u.mail
+                    """)
 
             vacations = cursor.fetchall()
 
@@ -274,6 +295,9 @@ def main():
     list_vacations_parser.add_argument(
         "-u", "--user", help="Filter by user ID or email address"
     )
+    list_vacations_parser.add_argument(
+        "--all", action="store_true", help="Show all vacations including past ones"
+    )
 
     # Add vacation command
     add_vacation_parser = subparsers.add_parser("add", help="Add a new vacation period")
@@ -294,7 +318,7 @@ def main():
     if args.command == "list-users":
         list_users()
     elif args.command == "list-vacations":
-        list_vacations(args.user)
+        list_vacations(args.user, args.all)
     elif args.command == "add":
         add_vacation(args.user, args.start_date, args.end_date)
     elif args.command == "delete":
