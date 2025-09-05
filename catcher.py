@@ -9,6 +9,7 @@
 # ///
 
 import os
+import sys
 import json
 import requests
 import sqlite3
@@ -26,7 +27,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.StreamHandler(),
+        logging.StreamHandler(sys.stdout),
         logging.FileHandler(Path(__file__).parent / "catcher.log"),
     ],
 )
