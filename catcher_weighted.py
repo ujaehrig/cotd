@@ -70,7 +70,7 @@ SLACK_TIMEOUT = int(os.environ.get("SLACK_API_TIMEOUT", "10"))  # seconds
 
 # Weighted selection parameters
 BASE_WEIGHT = 100
-YESTERDAY_PENALTY = 50
+YESTERDAY_PENALTY = 80  # Increased from 50 to make consecutive selection much less likely
 FREQUENCY_PENALTY_MULTIPLIER = 5  # Penalty per selection in last 30 days
 LOOKBACK_DAYS = 30  # Days to look back for frequency calculation
 CLEANUP_RETENTION_DAYS = 90  # Keep 90 days of history (3x lookback period)
@@ -423,19 +423,26 @@ def weighted_random_selection_improved(weighted_users: List[Dict]) -> Dict:
     
     if total_weight <= 0:
         # All weights are zero or negative - fall back to random selection
+        logging.warning("All weights are zero or negative, using random selection")
         return random.choice(weighted_users)["user"]
     
-    # Generate random number between 0 and total_weight
-    rand_val = random.uniform(0, total_weight)
+    # Generate random number between 0 and total_weight (exclusive)
+    rand_val = random.random() * total_weight
+    
+    # Debug logging
+    logging.debug(f"Random value: {rand_val:.3f}, Total weight: {total_weight:.3f}")
     
     # Find the user corresponding to this random value
     cumulative = 0
-    for wu in weighted_users:
+    for i, wu in enumerate(weighted_users):
         cumulative += wu["weight"]
-        if rand_val <= cumulative:
+        logging.debug(f"User {i}: {wu['user']['mail']}, weight: {wu['weight']:.3f}, cumulative: {cumulative:.3f}")
+        if rand_val < cumulative:
+            logging.debug(f"Selected user {wu['user']['mail']} (rand_val {rand_val:.3f} < cumulative {cumulative:.3f})")
             return wu["user"]
     
     # Fallback (shouldn't happen due to floating point precision)
+    logging.warning("Fallback selection used - this shouldn't happen")
     return weighted_users[-1]["user"]
 
 
@@ -524,7 +531,9 @@ def calculate_user_weight(
     
     # Apply penalty for being selected on the last working day (only if alternatives exist)
     if has_alternatives and last_working_day_catcher_id == user_id:
-        weight -= YESTERDAY_PENALTY
+        # Make the penalty much more aggressive - reduce weight to a very small fraction
+        weight = max(weight * 0.1, 1)  # Reduce to 10% of original weight, minimum 1
+        logging.debug(f"Applied consecutive day penalty to user {user_id}: weight reduced to {weight:.3f}")
     
     # Apply frequency penalty
     frequency_penalty = recent_selections * FREQUENCY_PENALTY_MULTIPLIER
