@@ -516,18 +516,22 @@ def calculate_user_weight(
     """
     weight = BASE_WEIGHT
     
-    # Add weight based on days since last selection
+    # Add weight based on days since last selection (non-linear growth)
     if last_chosen:
         try:
             last_date = datetime.datetime.strptime(last_chosen, "%Y-%m-%d").date()
             days_since = (datetime.date.today() - last_date).days
-            weight += days_since
+            # Use square root for gradual acceleration, then square for stronger acceleration after 10 days
+            if days_since <= 10:
+                weight += days_since ** 1.2  # Slight acceleration
+            else:
+                weight += (10 ** 1.2) + ((days_since - 10) ** 1.5)  # Stronger acceleration
         except ValueError:
             # If date parsing fails, treat as never selected
-            weight += 365  # High bonus for never selected
+            weight += 500  # High bonus for never selected
     else:
         # Never selected - give high bonus
-        weight += 365
+        weight += 500
     
     # Apply penalty for being selected on the last working day (only if alternatives exist)
     if has_alternatives and last_working_day_catcher_id == user_id:
@@ -635,14 +639,17 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
             weighted_users.sort(key=lambda x: x["weight"], reverse=True)
 
             if debug_weights:
+                total_weight = sum(wu["weight"] for wu in weighted_users)
                 logging.info("Weight calculations for all eligible users (after tie-breaking):")
                 for wu in weighted_users:
                     user = wu["user"]
                     tie_breaker = wu.get("tie_breaker_applied", 0)
                     base_weight = wu["weight"] - tie_breaker if tie_breaker > 0 else wu["weight"]
                     tie_info = f" (base: {base_weight:.1f} + tie_breaker: {tie_breaker:.3f})" if tie_breaker > 0 else ""
+                    probability = (wu["weight"] / total_weight) * 100 if total_weight > 0 else 0
                     logging.info(
                         f"  {user['mail']}: weight={wu['weight']:.3f}, "
+                        f"probability={probability:.1f}%, "
                         f"last_chosen={user['last_chosen']}, "
                         f"recent_selections={wu['recent_selections']}, "
                         f"is_last_working_day={wu['is_yesterday']}{tie_info}"
