@@ -73,7 +73,7 @@ BASE_WEIGHT = 100
 FREQUENCY_PENALTY_MULTIPLIER = 5  # Penalty per selection in last 60 days
 BALANCE_BONUS_MULTIPLIER = 10  # Bonus for users with fewer total selections
 LOOKBACK_DAYS = 60  # Days to look back for frequency calculation
-CLEANUP_RETENTION_DAYS = 365  # Keep 1 year of history
+CLEANUP_RETENTION_DAYS = int(os.environ.get("CLEANUP_RETENTION_DAYS", "365"))  # Keep 1 year of history
 CLEANUP_PROBABILITY = 0.1  # 10% chance of running cleanup each day
 
 

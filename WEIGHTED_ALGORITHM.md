@@ -34,13 +34,13 @@ weight = BASE_WEIGHT + days_since_last_selection - last_working_day_penalty - fr
 
 ### Components
 
-| Component | Value | Description |
-|-----------|-------|-------------|
-| `BASE_WEIGHT` | 100 | Starting weight for all users |
-| `days_since_last_selection` | +1 per day | Encourages selecting users who haven't been chosen recently |
-| `last_working_day_penalty` | -90% of weight | Applied only if user was selected on the last working day AND alternatives exist |
-| `frequency_penalty` | -5 per selection | Based on selections in last 60 days |
-| `balance_bonus` | ±10 per difference | Based on total selections vs. average (NEW) |
+| Component                   | Value              | Description                                                                      |
+|-----------------------------|--------------------|----------------------------------------------------------------------------------|
+| `BASE_WEIGHT`               | 100                | Starting weight for all users                                                    |
+| `days_since_last_selection` | +1 per day         | Encourages selecting users who haven't been chosen recently                      |
+| `last_working_day_penalty`  | -90% of weight     | Applied only if user was selected on the last working day AND alternatives exist |
+| `frequency_penalty`         | -5 per selection   | Based on selections in last 60 days                                              |
+| `balance_bonus`             | ±10 per difference | Based on total selections vs. average (NEW)                                      |
 
 ### Special Cases
 
@@ -96,7 +96,7 @@ For each available user:
 
 **Users:**
 - Alice: Last selected 5 days ago, 2 recent selections
-- Bob: Last selected 2 days ago, 1 recent selection  
+- Bob: Last selected 2 days ago, 1 recent selection
 - Charlie: Never selected, 0 recent selections
 
 **Weight Calculations:**
@@ -151,7 +151,7 @@ Bob: 100 + 2 + 0 - (1 × 5) = 97  (NO last working day penalty - no alternatives
 ### Automatic Cleanup
 The system includes automatic cleanup of old selection history:
 
-- **Retention Period**: 90 days (3x the lookback period)
+- **Retention Period**: 365 days (1 year)
 - **Cleanup Frequency**: 10% chance each time a selection is made
 - **Purpose**: Prevents unlimited database growth while retaining useful history
 

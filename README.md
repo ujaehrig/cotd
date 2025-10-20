@@ -60,6 +60,9 @@ HOLIDAY_REGION=BW  # German state code for fallback holiday detection (BW=Baden-
 
 # Slack API timeout in seconds (optional)
 SLACK_API_TIMEOUT=10
+
+# Database cleanup settings (optional)
+CLEANUP_RETENTION_DAYS=365  # Number of days to retain selection history
 ```
 
 **Holiday Region Codes**: The `HOLIDAY_REGION` setting uses German state codes for the fallback holiday library. Common codes include:
