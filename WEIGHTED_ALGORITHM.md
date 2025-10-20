@@ -29,7 +29,7 @@ This ensures that if someone was selected on Friday, they won't be selected agai
 Each eligible user receives a weight calculated as:
 
 ```
-weight = BASE_WEIGHT + days_since_last_selection_bonus - last_working_day_penalty - frequency_penalty
+weight = BASE_WEIGHT + days_since_last_selection - last_working_day_penalty - frequency_penalty + balance_bonus
 ```
 
 ### Components
@@ -37,31 +37,17 @@ weight = BASE_WEIGHT + days_since_last_selection_bonus - last_working_day_penalt
 | Component | Value | Description |
 |-----------|-------|-------------|
 | `BASE_WEIGHT` | 100 | Starting weight for all users |
-| `days_since_last_selection_bonus` | Non-linear growth | Accelerating bonus based on days since last selection |
-| `last_working_day_penalty` | 90% reduction | Applied only if user was selected on the last working day AND alternatives exist |
-| `frequency_penalty` | -5 per selection | Based on selections in last 30 days |
-
-### Days Since Last Selection Bonus (Non-Linear)
-
-The bonus for days since last selection uses a non-linear formula to increase probability over time:
-
-- **Days 1-10**: `days^1.2` (gradual acceleration)
-- **Days 11+**: `10^1.2 + (days-10)^1.5` (stronger acceleration)
-
-**Examples:**
-- 1 day: +1.0 points
-- 5 days: +6.9 points  
-- 10 days: +15.8 points
-- 15 days: +25.1 points
-- 20 days: +37.0 points
-
-This ensures that users who haven't been selected for longer periods have increasingly higher chances of being chosen.
+| `days_since_last_selection` | +1 per day | Encourages selecting users who haven't been chosen recently |
+| `last_working_day_penalty` | -90% of weight | Applied only if user was selected on the last working day AND alternatives exist |
+| `frequency_penalty` | -5 per selection | Based on selections in last 60 days |
+| `balance_bonus` | ±10 per difference | Based on total selections vs. average (NEW) |
 
 ### Special Cases
 
 - **Never Selected**: Users with no `last_chosen` date get +500 bonus
 - **Minimum Weight**: All weights are clamped to minimum value of 1
 - **No Alternatives**: Last working day penalty is NOT applied if only one user is available
+- **Balance Bonus**: Users with fewer total selections than average get positive bonus, users with more get penalty
 
 ## Tie-Breaking Logic
 
@@ -115,12 +101,12 @@ For each available user:
 
 **Weight Calculations:**
 ```
-Alice:   100 + 6.9 + 0 - (2 × 5) = 96.9
-Bob:     100 + 2.3 + 0 - (1 × 5) = 97.3
-Charlie: 100 + 500 + 0 - (0 × 5) = 600
+Alice:   100 + 5 + 0 - (2 × 5) = 95
+Bob:     100 + 2 + 0 - (1 × 5) = 97
+Charlie: 100 + 365 + 0 - (0 × 5) = 465
 ```
 
-**Result:** Charlie heavily favored (600/694 ≈ 86%), Bob and Alice roughly equal
+**Result:** Charlie most likely (465/557 ≈ 83%), Bob second (97/557 ≈ 17%), Alice least likely (95/557 ≈ 17%)
 
 ### Example 2: Last Working Day Penalty
 
@@ -128,12 +114,12 @@ Charlie: 100 + 500 + 0 - (0 × 5) = 600
 
 **Weight Calculations:**
 ```
-Alice:   100 + 6.9 + 0 - (2 × 5) = 96.9
-Bob:     (100 + 2.3 - (1 × 5)) × 0.1 = 9.7  (90% penalty applied)
-Charlie: 100 + 500 + 0 - (0 × 5) = 600
+Alice:   100 + 5 + 0 - (2 × 5) = 95
+Bob:     100 + 2 - 50 - (1 × 5) = 47  (last working day penalty applied)
+Charlie: 100 + 365 + 0 - (0 × 5) = 465
 ```
 
-**Result:** Charlie heavily favored, Alice strongly preferred over Bob
+**Result:** Charlie heavily favored, Alice preferred over Bob
 
 ### Example 3: Tie-Breaking
 
@@ -208,9 +194,9 @@ All parameters can be adjusted by modifying constants in the script:
 
 ```python
 BASE_WEIGHT = 100                    # Starting weight for all users
-YESTERDAY_PENALTY = 80               # Penalty for consecutive working days (reduces weight to 10%)
 FREQUENCY_PENALTY_MULTIPLIER = 5     # Penalty per recent selection
-LOOKBACK_DAYS = 30                   # Days to consider for frequency penalty
+BALANCE_BONUS_MULTIPLIER = 10        # Multiplier for historical balance factor
+LOOKBACK_DAYS = 60                   # Days to consider for frequency penalty
 ```
 
 ## Algorithm Properties

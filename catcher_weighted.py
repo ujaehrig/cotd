@@ -70,9 +70,9 @@ SLACK_TIMEOUT = int(os.environ.get("SLACK_API_TIMEOUT", "10"))  # seconds
 
 # Weighted selection parameters
 BASE_WEIGHT = 100
-YESTERDAY_PENALTY = 80  # Increased from 50 to make consecutive selection much less likely
-FREQUENCY_PENALTY_MULTIPLIER = 5  # Penalty per selection in last 30 days
-LOOKBACK_DAYS = 30  # Days to look back for frequency calculation
+FREQUENCY_PENALTY_MULTIPLIER = 5  # Penalty per selection in last 60 days
+BALANCE_BONUS_MULTIPLIER = 10  # Bonus for users with fewer total selections
+LOOKBACK_DAYS = 60  # Days to look back for frequency calculation
 CLEANUP_RETENTION_DAYS = 90  # Keep 90 days of history (3x lookback period)
 CLEANUP_PROBABILITY = 0.1  # 10% chance of running cleanup each day
 
@@ -499,6 +499,8 @@ def calculate_user_weight(
     last_chosen: Optional[str], 
     last_working_day_catcher_id: Optional[int],
     recent_selections: int,
+    total_selections: int,
+    avg_total_selections: float,
     has_alternatives: bool
 ) -> float:
     """
@@ -509,6 +511,8 @@ def calculate_user_weight(
         last_chosen: Last chosen date (ISO format) or None
         last_working_day_catcher_id: User ID of the last working day's catcher
         recent_selections: Number of recent selections
+        total_selections: Total number of selections (all time)
+        avg_total_selections: Average total selections across all users
         has_alternatives: Whether there are other available users
 
     Returns:
@@ -542,6 +546,12 @@ def calculate_user_weight(
     # Apply frequency penalty
     frequency_penalty = recent_selections * FREQUENCY_PENALTY_MULTIPLIER
     weight -= frequency_penalty
+    
+    # Apply balance bonus for users with fewer total selections
+    if avg_total_selections > 0:
+        balance_factor = (avg_total_selections - total_selections) / avg_total_selections
+        balance_bonus = balance_factor * BALANCE_BONUS_MULTIPLIER
+        weight += balance_bonus
     
     return max(weight, 1)  # Ensure weight is always positive
 
@@ -615,13 +625,27 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
 
             # Calculate weights for all available users
             weighted_users = []
+            
+            # Get total selection counts for balance calculation
+            user_ids = [user["id"] for user in available_users]
+            total_selections_map = {}
+            for user in available_users:
+                cur.execute("SELECT COUNT(*) FROM selection_history WHERE user_id = ?", (user["id"],))
+                total_selections_map[user["id"]] = cur.fetchone()[0]
+            
+            # Calculate average total selections
+            avg_total_selections = sum(total_selections_map.values()) / len(total_selections_map) if total_selections_map else 0
+            
             for user in available_users:
                 recent_selections = get_recent_selection_count(conn, user["id"])
+                total_selections = total_selections_map[user["id"]]
                 weight = calculate_user_weight(
                     user["id"],
                     user["last_chosen"],
                     last_working_day_catcher_id,
                     recent_selections,
+                    total_selections,
+                    avg_total_selections,
                     has_alternatives
                 )
                 
@@ -629,6 +653,7 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
                     "user": user,
                     "weight": weight,
                     "recent_selections": recent_selections,
+                    "total_selections": total_selections,
                     "is_yesterday": user["id"] == last_working_day_catcher_id
                 })
 
@@ -652,6 +677,7 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
                         f"probability={probability:.1f}%, "
                         f"last_chosen={user['last_chosen']}, "
                         f"recent_selections={wu['recent_selections']}, "
+                        f"total_selections={wu['total_selections']}, "
                         f"is_last_working_day={wu['is_yesterday']}{tie_info}"
                     )
 
