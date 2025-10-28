@@ -22,9 +22,14 @@ from typing import Optional, Dict, Tuple, List
 from pathlib import Path
 from dotenv import load_dotenv
 
+
+# Load environment variables from .env file
+load_dotenv()
+
 # Configure logging
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(),
@@ -32,14 +37,11 @@ logging.basicConfig(
     ],
 )
 
-# Load environment variables from .env file
-load_dotenv()
-
 
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command line arguments.
-    
+
     Returns:
         argparse.Namespace: Parsed arguments
     """
@@ -49,14 +51,15 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Perform all checks without updating database or sending notifications"
+        help="Perform all checks without updating database or sending notifications",
     )
     parser.add_argument(
         "--debug-weights",
         action="store_true",
-        help="Show weight calculations for all eligible users"
+        help="Show weight calculations for all eligible users",
     )
     return parser.parse_args()
+
 
 # Constants
 DATABASE_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
@@ -73,7 +76,9 @@ BASE_WEIGHT = 100
 FREQUENCY_PENALTY_MULTIPLIER = 5  # Penalty per selection in last 60 days
 BALANCE_BONUS_MULTIPLIER = 10  # Bonus for users with fewer total selections
 LOOKBACK_DAYS = 60  # Days to look back for frequency calculation
-CLEANUP_RETENTION_DAYS = int(os.environ.get("CLEANUP_RETENTION_DAYS", "365"))  # Keep 1 year of history
+CLEANUP_RETENTION_DAYS = int(
+    os.environ.get("CLEANUP_RETENTION_DAYS", "365")
+)  # Keep 1 year of history
 CLEANUP_PROBABILITY = 0.1  # 10% chance of running cleanup each day
 
 
@@ -128,19 +133,23 @@ def is_holiday() -> bool:
             logging.debug("No holiday today (web service)")
             return False
         else:
-            logging.warning(f"Web service returned unexpected status: {response.status_code}")
+            logging.warning(
+                f"Web service returned unexpected status: {response.status_code}"
+            )
     except requests.exceptions.RequestException as e:
         logging.warning(f"Web service failed, falling back to holidays library: {e}")
-    
+
     # Fallback to holidays library
     try:
         # Create holidays object for Germany with configurable state
         german_holidays = holidays.Germany(state=HOLIDAY_REGION)
         today = datetime.date.today()
-        
+
         if today in german_holidays:
             holiday_name = german_holidays.get(today)
-            logging.info(f"Holiday detected via fallback library ({HOLIDAY_REGION}): {holiday_name}")
+            logging.info(
+                f"Holiday detected via fallback library ({HOLIDAY_REGION}): {holiday_name}"
+            )
             return True
         else:
             logging.debug(f"No holiday today (fallback library, {HOLIDAY_REGION})")
@@ -253,36 +262,41 @@ def get_db_connection() -> sqlite3.Connection:
         raise
 
 
-def cleanup_old_selection_history(conn: sqlite3.Connection, retention_days: int = CLEANUP_RETENTION_DAYS) -> None:
+def cleanup_old_selection_history(
+    conn: sqlite3.Connection, retention_days: int = CLEANUP_RETENTION_DAYS
+) -> None:
     """
     Clean up old selection history records to prevent unlimited growth.
-    
+
     Args:
         conn: Database connection
         retention_days: Number of days to retain (default: 90 days)
     """
     try:
-        cutoff_date = (datetime.date.today() - datetime.timedelta(days=retention_days)).isoformat()
+        cutoff_date = (
+            datetime.date.today() - datetime.timedelta(days=retention_days)
+        ).isoformat()
         cursor = conn.cursor()
-        
+
         # Count records that would be deleted
         cursor.execute(
             "SELECT COUNT(*) FROM selection_history WHERE selected_date < ?",
-            (cutoff_date,)
+            (cutoff_date,),
         )
         old_count = cursor.fetchone()[0]
-        
+
         if old_count > 0:
             # Delete old records
             cursor.execute(
-                "DELETE FROM selection_history WHERE selected_date < ?",
-                (cutoff_date,)
+                "DELETE FROM selection_history WHERE selected_date < ?", (cutoff_date,)
             )
-            
+
             deleted_count = cursor.rowcount
             if deleted_count > 0:
-                logging.info(f"Cleaned up {deleted_count} old selection history records (older than {retention_days} days)")
-        
+                logging.info(
+                    f"Cleaned up {deleted_count} old selection history records (older than {retention_days} days)"
+                )
+
     except sqlite3.Error as e:
         logging.warning(f"Failed to clean up old selection history: {e}")
 
@@ -330,15 +344,15 @@ def get_last_working_day_catcher(conn: sqlite3.Connection) -> Optional[int]:
     """
     try:
         cursor = conn.cursor()
-        
+
         # Look back up to 7 days to find the last working day with a selection
         for days_back in range(1, 8):
             check_date = datetime.date.today() - datetime.timedelta(days=days_back)
-            
+
             # Skip weekends
             if check_date.weekday() >= 5:  # Saturday or Sunday
                 continue
-                
+
             # Check if it was a holiday
             try:
                 # Check with holidays library
@@ -348,7 +362,7 @@ def get_last_working_day_catcher(conn: sqlite3.Connection) -> Optional[int]:
             except Exception:
                 # If holiday check fails, assume it wasn't a holiday
                 pass
-            
+
             # Check if someone was selected on this working day
             cursor.execute(
                 """
@@ -358,11 +372,11 @@ def get_last_working_day_catcher(conn: sqlite3.Connection) -> Optional[int]:
             """,
                 (check_date.isoformat(),),
             )
-            
+
             result = cursor.fetchone()
             if result:
                 return result[0]
-        
+
         # No catcher found in the last 7 working days
         return None
     except sqlite3.Error as e:
@@ -370,7 +384,9 @@ def get_last_working_day_catcher(conn: sqlite3.Connection) -> Optional[int]:
         return None
 
 
-def get_recent_selection_count(conn: sqlite3.Connection, user_id: int, days: int = LOOKBACK_DAYS) -> int:
+def get_recent_selection_count(
+    conn: sqlite3.Connection, user_id: int, days: int = LOOKBACK_DAYS
+) -> int:
     """
     Get the number of times a user was selected in the last N days.
 
@@ -383,7 +399,9 @@ def get_recent_selection_count(conn: sqlite3.Connection, user_id: int, days: int
         int: Number of selections in the specified period
     """
     try:
-        cutoff_date = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
+        cutoff_date = (
+            datetime.date.today() - datetime.timedelta(days=days)
+        ).isoformat()
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -394,7 +412,7 @@ def get_recent_selection_count(conn: sqlite3.Connection, user_id: int, days: int
         """,
             (user_id, cutoff_date),
         )
-        
+
         return cursor.fetchone()[0]
     except sqlite3.Error as e:
         logging.error(f"Error getting recent selection count: {e}")
@@ -405,42 +423,46 @@ def weighted_random_selection_improved(weighted_users: List[Dict]) -> Dict:
     """
     Improved weighted random selection using cumulative probability.
     More efficient than creating large selection pools.
-    
+
     Args:
         weighted_users: List of dicts with 'user' and 'weight' keys
-        
+
     Returns:
         Selected user dict
     """
     if not weighted_users:
         raise ValueError("No users provided")
-    
+
     if len(weighted_users) == 1:
         return weighted_users[0]["user"]
-    
+
     # Calculate total weight
     total_weight = sum(wu["weight"] for wu in weighted_users)
-    
+
     if total_weight <= 0:
         # All weights are zero or negative - fall back to random selection
         logging.warning("All weights are zero or negative, using random selection")
         return random.choice(weighted_users)["user"]
-    
+
     # Generate random number between 0 and total_weight (exclusive)
     rand_val = random.random() * total_weight
-    
+
     # Debug logging
     logging.debug(f"Random value: {rand_val:.3f}, Total weight: {total_weight:.3f}")
-    
+
     # Find the user corresponding to this random value
     cumulative = 0
     for i, wu in enumerate(weighted_users):
         cumulative += wu["weight"]
-        logging.debug(f"User {i}: {wu['user']['mail']}, weight: {wu['weight']:.3f}, cumulative: {cumulative:.3f}")
+        logging.debug(
+            f"User {i}: {wu['user']['mail']}, weight: {wu['weight']:.3f}, cumulative: {cumulative:.3f}"
+        )
         if rand_val < cumulative:
-            logging.debug(f"Selected user {wu['user']['mail']} (rand_val {rand_val:.3f} < cumulative {cumulative:.3f})")
+            logging.debug(
+                f"Selected user {wu['user']['mail']} (rand_val {rand_val:.3f} < cumulative {cumulative:.3f})"
+            )
             return wu["user"]
-    
+
     # Fallback (shouldn't happen due to floating point precision)
     logging.warning("Fallback selection used - this shouldn't happen")
     return weighted_users[-1]["user"]
@@ -449,14 +471,14 @@ def weighted_random_selection_improved(weighted_users: List[Dict]) -> Dict:
 def add_tie_breaking_logic(weighted_users: List[Dict]) -> List[Dict]:
     """
     Add tie-breaking logic for users with equal weights.
-    
+
     Tie-breaking priority:
     1. User who was selected longest ago (or never selected)
     2. Alphabetical order by email (for deterministic results)
-    
+
     Args:
         weighted_users: List of user weight data
-        
+
     Returns:
         List with tie-breaking weights applied
     """
@@ -468,7 +490,7 @@ def add_tie_breaking_logic(weighted_users: List[Dict]) -> List[Dict]:
         if weight_key not in weight_groups:
             weight_groups[weight_key] = []
         weight_groups[weight_key].append(wu)
-    
+
     # Apply tie-breaking within each weight group
     result = []
     for weight, users in weight_groups.items():
@@ -477,11 +499,15 @@ def add_tie_breaking_logic(weighted_users: List[Dict]) -> List[Dict]:
             result.extend(users)
         else:
             # Break ties by last_chosen date, then by email
-            users_sorted = sorted(users, key=lambda wu: (
-                wu["user"]["last_chosen"] or "1900-01-01",  # Never selected = oldest
-                wu["user"]["mail"]  # Alphabetical as final tie-breaker
-            ))
-            
+            users_sorted = sorted(
+                users,
+                key=lambda wu: (
+                    wu["user"]["last_chosen"]
+                    or "1900-01-01",  # Never selected = oldest
+                    wu["user"]["mail"],  # Alphabetical as final tie-breaker
+                ),
+            )
+
             # Add small incremental bonus to maintain preference order
             for i, wu in enumerate(users_sorted):
                 # Add tiny increment to break ties while preserving weight meaning
@@ -490,18 +516,18 @@ def add_tie_breaking_logic(weighted_users: List[Dict]) -> List[Dict]:
                 wu_copy["weight"] = wu["weight"] + tie_breaker
                 wu_copy["tie_breaker_applied"] = tie_breaker
                 result.append(wu_copy)
-    
+
     return result
 
 
 def calculate_user_weight(
-    user_id: int, 
-    last_chosen: Optional[str], 
+    user_id: int,
+    last_chosen: Optional[str],
     last_working_day_catcher_id: Optional[int],
     recent_selections: int,
     total_selections: int,
     avg_total_selections: float,
-    has_alternatives: bool
+    has_alternatives: bool,
 ) -> float:
     """
     Calculate the selection weight for a user.
@@ -519,7 +545,7 @@ def calculate_user_weight(
         float: Calculated weight for selection
     """
     weight = BASE_WEIGHT
-    
+
     # Add weight based on days since last selection (non-linear growth)
     if last_chosen:
         try:
@@ -527,36 +553,44 @@ def calculate_user_weight(
             days_since = (datetime.date.today() - last_date).days
             # Use square root for gradual acceleration, then square for stronger acceleration after 10 days
             if days_since <= 10:
-                weight += days_since ** 1.2  # Slight acceleration
+                weight += days_since**1.2  # Slight acceleration
             else:
-                weight += (10 ** 1.2) + ((days_since - 10) ** 1.5)  # Stronger acceleration
+                weight += (10**1.2) + (
+                    (days_since - 10) ** 1.5
+                )  # Stronger acceleration
         except ValueError:
             # If date parsing fails, treat as never selected
             weight += 500  # High bonus for never selected
     else:
         # Never selected - give high bonus
         weight += 500
-    
+
     # Apply penalty for being selected on the last working day (only if alternatives exist)
     if has_alternatives and last_working_day_catcher_id == user_id:
         # Make the penalty much more aggressive - reduce weight to a very small fraction
         weight = max(weight * 0.1, 1)  # Reduce to 10% of original weight, minimum 1
-        logging.debug(f"Applied consecutive day penalty to user {user_id}: weight reduced to {weight:.3f}")
-    
+        logging.debug(
+            f"Applied consecutive day penalty to user {user_id}: weight reduced to {weight:.3f}"
+        )
+
     # Apply frequency penalty
     frequency_penalty = recent_selections * FREQUENCY_PENALTY_MULTIPLIER
     weight -= frequency_penalty
-    
+
     # Apply balance bonus for users with fewer total selections
     if avg_total_selections > 0:
-        balance_factor = (avg_total_selections - total_selections) / avg_total_selections
+        balance_factor = (
+            avg_total_selections - total_selections
+        ) / avg_total_selections
         balance_bonus = balance_factor * BALANCE_BONUS_MULTIPLIER
         weight += balance_bonus
-    
+
     return max(weight, 1)  # Ensure weight is always positive
 
 
-def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = False) -> Tuple[Optional[str], bool]:
+def find_next_catcher_weighted(
+    dry_run: bool = False, debug_weights: bool = False
+) -> Tuple[Optional[str], bool]:
     """
     Find the next available user using weighted selection algorithm.
 
@@ -604,7 +638,7 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
             )
 
             all_users = cur.fetchall()
-            
+
             # Filter out users who are on vacation
             available_users = []
             for user in all_users:
@@ -612,30 +646,40 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
                     available_users.append(user)
 
             if not available_users:
-                logging.warning("No available users found for today (all on vacation or not scheduled)")
+                logging.warning(
+                    "No available users found for today (all on vacation or not scheduled)"
+                )
                 return None, False
 
             # Get last working day's catcher
             last_working_day_catcher_id = get_last_working_day_catcher(conn)
-            
+
             # Check if we have alternatives to last working day's catcher
             has_alternatives = len(available_users) > 1 or (
-                len(available_users) == 1 and available_users[0]["id"] != last_working_day_catcher_id
+                len(available_users) == 1
+                and available_users[0]["id"] != last_working_day_catcher_id
             )
 
             # Calculate weights for all available users
             weighted_users = []
-            
+
             # Get total selection counts for balance calculation
             user_ids = [user["id"] for user in available_users]
             total_selections_map = {}
             for user in available_users:
-                cur.execute("SELECT COUNT(*) FROM selection_history WHERE user_id = ?", (user["id"],))
+                cur.execute(
+                    "SELECT COUNT(*) FROM selection_history WHERE user_id = ?",
+                    (user["id"],),
+                )
                 total_selections_map[user["id"]] = cur.fetchone()[0]
-            
+
             # Calculate average total selections
-            avg_total_selections = sum(total_selections_map.values()) / len(total_selections_map) if total_selections_map else 0
-            
+            avg_total_selections = (
+                sum(total_selections_map.values()) / len(total_selections_map)
+                if total_selections_map
+                else 0
+            )
+
             for user in available_users:
                 recent_selections = get_recent_selection_count(conn, user["id"])
                 total_selections = total_selections_map[user["id"]]
@@ -646,32 +690,44 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
                     recent_selections,
                     total_selections,
                     avg_total_selections,
-                    has_alternatives
+                    has_alternatives,
                 )
-                
-                weighted_users.append({
-                    "user": user,
-                    "weight": weight,
-                    "recent_selections": recent_selections,
-                    "total_selections": total_selections,
-                    "is_yesterday": user["id"] == last_working_day_catcher_id
-                })
+
+                weighted_users.append(
+                    {
+                        "user": user,
+                        "weight": weight,
+                        "recent_selections": recent_selections,
+                        "total_selections": total_selections,
+                        "is_yesterday": user["id"] == last_working_day_catcher_id,
+                    }
+                )
 
             # Apply tie-breaking logic for users with equal weights
             weighted_users = add_tie_breaking_logic(weighted_users)
-            
+
             # Sort by final weight (highest first) for debugging
             weighted_users.sort(key=lambda x: x["weight"], reverse=True)
 
             if debug_weights:
                 total_weight = sum(wu["weight"] for wu in weighted_users)
-                logging.info("Weight calculations for all eligible users (after tie-breaking):")
+                logging.info(
+                    "Weight calculations for all eligible users (after tie-breaking):"
+                )
                 for wu in weighted_users:
                     user = wu["user"]
                     tie_breaker = wu.get("tie_breaker_applied", 0)
-                    base_weight = wu["weight"] - tie_breaker if tie_breaker > 0 else wu["weight"]
-                    tie_info = f" (base: {base_weight:.1f} + tie_breaker: {tie_breaker:.3f})" if tie_breaker > 0 else ""
-                    probability = (wu["weight"] / total_weight) * 100 if total_weight > 0 else 0
+                    base_weight = (
+                        wu["weight"] - tie_breaker if tie_breaker > 0 else wu["weight"]
+                    )
+                    tie_info = (
+                        f" (base: {base_weight:.1f} + tie_breaker: {tie_breaker:.3f})"
+                        if tie_breaker > 0
+                        else ""
+                    )
+                    probability = (
+                        (wu["weight"] / total_weight) * 100 if total_weight > 0 else 0
+                    )
                     logging.info(
                         f"  {user['mail']}: weight={wu['weight']:.3f}, "
                         f"probability={probability:.1f}%, "
@@ -685,29 +741,41 @@ def find_next_catcher_weighted(dry_run: bool = False, debug_weights: bool = Fals
             selected_user = weighted_random_selection_improved(weighted_users)
 
             if dry_run:
-                selected_weight = next(wu['weight'] for wu in weighted_users if wu['user']['id'] == selected_user['id'])
-                logging.info(f"[DRY RUN] Would select: {selected_user['mail']} (final weight: {selected_weight:.3f})")
+                selected_weight = next(
+                    wu["weight"]
+                    for wu in weighted_users
+                    if wu["user"]["id"] == selected_user["id"]
+                )
+                logging.info(
+                    f"[DRY RUN] Would select: {selected_user['mail']} (final weight: {selected_weight:.3f})"
+                )
             else:
                 # Record the selection in history
                 cur.execute(
                     "INSERT INTO selection_history (user_id, selected_date) VALUES (?, ?)",
                     (selected_user["id"], today),
                 )
-                
+
                 # Update the last_chosen date for backward compatibility
                 cur.execute(
                     "UPDATE user SET last_chosen = ? WHERE id = ?",
                     (today, selected_user["id"]),
                 )
-                
+
                 conn.commit()
-                
+
                 # Occasionally clean up old selection history (10% chance)
                 if not dry_run and random.random() < CLEANUP_PROBABILITY:
                     cleanup_old_selection_history(conn)
-                
-                selected_weight = next(wu['weight'] for wu in weighted_users if wu['user']['id'] == selected_user['id'])
-                logging.info(f"Selected new catcher: {selected_user['mail']} (final weight: {selected_weight:.3f})")
+
+                selected_weight = next(
+                    wu["weight"]
+                    for wu in weighted_users
+                    if wu["user"]["id"] == selected_user["id"]
+                )
+                logging.info(
+                    f"Selected new catcher: {selected_user['mail']} (final weight: {selected_weight:.3f})"
+                )
 
             return selected_user["mail"], True
 
@@ -723,10 +791,12 @@ def main() -> None:
     try:
         # Parse command line arguments
         args = parse_arguments()
-        
+
         if args.dry_run:
-            logging.info("[DRY RUN] Running in dry-run mode - no database changes or notifications will be sent")
-        
+            logging.info(
+                "[DRY RUN] Running in dry-run mode - no database changes or notifications will be sent"
+            )
+
         # Validate environment variables
         validate_environment()
 
@@ -741,10 +811,9 @@ def main() -> None:
 
         # Find next catcher using weighted algorithm
         mail, is_new_selection = find_next_catcher_weighted(
-            dry_run=args.dry_run, 
-            debug_weights=args.debug_weights
+            dry_run=args.dry_run, debug_weights=args.debug_weights
         )
-        
+
         if mail:
             if is_new_selection:
                 # Only trigger Slack if this is a new selection
