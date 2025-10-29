@@ -58,6 +58,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Show weight calculations for all eligible users",
     )
+    parser.add_argument(
+        "--force-notify",
+        action="store_true",
+        help="Send notification even if catcher was already selected today",
+    )
     return parser.parse_args()
 
 
@@ -815,8 +820,8 @@ def main() -> None:
         )
 
         if mail:
-            if is_new_selection:
-                # Only trigger Slack if this is a new selection
+            if is_new_selection or args.force_notify:
+                # Trigger Slack if this is a new selection or force-notify is enabled
                 success = trigger_slack(mail, dry_run=args.dry_run)
                 if success:
                     logging.info(f"Successfully notified catcher: {mail}")

@@ -32,7 +32,12 @@ uv run app.py
 uv run test_webhooks.py
 
 # Run the catcher script
-uv run catcher.py
+uv run catcher_weighted.py
+
+# Run with options
+uv run catcher_weighted.py --dry-run          # Test without making changes
+uv run catcher_weighted.py --debug-weights    # Show weight calculations
+uv run catcher_weighted.py --force-notify     # Send notification even if catcher already selected
 ```
 
 ### Option 2: Traditional Installation
