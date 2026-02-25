@@ -66,7 +66,7 @@ def get_user_id_by_email(email: str) -> int:
                 logging.error(f"User with email '{email}' not found.")
                 sys.exit(1)
 
-            return user['id']
+            return user["id"]
     except sqlite3.Error as e:
         logging.error(f"Error looking up user: {e}")
         sys.exit(1)
@@ -78,7 +78,12 @@ def list_users():
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, mail, weekdays, last_chosen FROM user ORDER BY mail"
+                """
+                SELECT u.id, u.mail, u.weekdays, u.last_chosen, t.name as tenant_name
+                FROM user u
+                LEFT JOIN tenants t ON u.tenant_id = t.id
+                ORDER BY u.mail
+                """
             )
             users = cursor.fetchall()
 
@@ -87,13 +92,16 @@ def list_users():
                 return
 
             print("\nUsers:")
-            print("-" * 80)
-            print(f"{'ID':<5} {'Email':<30} {'Weekdays':<10} {'Last Chosen':<12}")
-            print("-" * 80)
+            print("-" * 95)
+            print(
+                f"{'ID':<5} {'Email':<30} {'Tenant':<20} {'Weekdays':<10} {'Last Chosen':<12}"
+            )
+            print("-" * 95)
 
             for user in users:
+                tenant_name = user["tenant_name"] or "No Tenant"
                 print(
-                    f"{user['id']:<5} {user['mail']:<30} {user['weekdays']:<10} {user['last_chosen'] or 'Never':<12}"
+                    f"{user['id']:<5} {user['mail']:<30} {tenant_name:<20} {user['weekdays']:<10} {user['last_chosen'] or 'Never':<12}"
                 )
     except sqlite3.Error as e:
         logging.error(f"Error listing users: {e}")
@@ -126,9 +134,10 @@ def list_vacations(user_identifier=None, show_all=False):
                 if show_all:
                     cursor.execute(
                         """
-                        SELECT v.id, u.mail, v.start_date, v.end_date
+                        SELECT v.id, u.mail, t.name as tenant_name, v.start_date, v.end_date
                         FROM vacation v
                         JOIN user u ON v.user_id = u.id
+                        LEFT JOIN tenants t ON u.tenant_id = t.id
                         WHERE v.user_id = ?
                         ORDER BY v.start_date
                     """,
@@ -137,9 +146,10 @@ def list_vacations(user_identifier=None, show_all=False):
                 else:
                     cursor.execute(
                         """
-                        SELECT v.id, u.mail, v.start_date, v.end_date
+                        SELECT v.id, u.mail, t.name as tenant_name, v.start_date, v.end_date
                         FROM vacation v
                         JOIN user u ON v.user_id = u.id
+                        LEFT JOIN tenants t ON u.tenant_id = t.id
                         WHERE v.user_id = ? AND v.end_date >= date('now')
                         ORDER BY v.start_date
                     """,
@@ -149,16 +159,18 @@ def list_vacations(user_identifier=None, show_all=False):
                 print("\nAll vacation periods:")
                 if show_all:
                     cursor.execute("""
-                        SELECT v.id, u.mail, v.start_date, v.end_date
+                        SELECT v.id, u.mail, t.name as tenant_name, v.start_date, v.end_date
                         FROM vacation v
                         JOIN user u ON v.user_id = u.id
+                        LEFT JOIN tenants t ON u.tenant_id = t.id
                         ORDER BY v.start_date, u.mail
                     """)
                 else:
                     cursor.execute("""
-                        SELECT v.id, u.mail, v.start_date, v.end_date
+                        SELECT v.id, u.mail, t.name as tenant_name, v.start_date, v.end_date
                         FROM vacation v
                         JOIN user u ON v.user_id = u.id
+                        LEFT JOIN tenants t ON u.tenant_id = t.id
                         WHERE v.end_date >= date('now')
                         ORDER BY v.start_date, u.mail
                     """)
@@ -169,13 +181,16 @@ def list_vacations(user_identifier=None, show_all=False):
                 print("No vacation periods found.")
                 return
 
-            print("-" * 80)
-            print(f"{'ID':<5} {'Email':<30} {'Start Date':<12} {'End Date':<12}")
-            print("-" * 80)
+            print("-" * 100)
+            print(
+                f"{'ID':<5} {'Email':<30} {'Tenant':<20} {'Start Date':<12} {'End Date':<12}"
+            )
+            print("-" * 100)
 
             for vacation in vacations:
+                tenant_name = vacation["tenant_name"] or "No Tenant"
                 print(
-                    f"{vacation['id']:<5} {vacation['mail']:<30} {vacation['start_date']:<12} {vacation['end_date']:<12}"
+                    f"{vacation['id']:<5} {vacation['mail']:<30} {tenant_name:<20} {vacation['start_date']:<12} {vacation['end_date']:<12}"
                 )
     except sqlite3.Error as e:
         logging.error(f"Error listing vacations: {e}")
@@ -190,7 +205,9 @@ def add_vacation(user_identifier, start_date, end_date=None):
     If end_date is not provided, it will be set to the same as start_date (single day vacation).
     """
     # Resolve user identifier to user ID
-    if isinstance(user_identifier, int) or (isinstance(user_identifier, str) and user_identifier.isdigit()):
+    if isinstance(user_identifier, int) or (
+        isinstance(user_identifier, str) and user_identifier.isdigit()
+    ):
         user_id = int(user_identifier)
     else:
         # It's an email address
@@ -237,7 +254,9 @@ def add_vacation(user_identifier, start_date, end_date=None):
             if single_day:
                 logging.info(f"Single day vacation added for {user['mail']} on {start}")
             else:
-                logging.info(f"Vacation period added for {user['mail']} from {start} to {end}")
+                logging.info(
+                    f"Vacation period added for {user['mail']} from {start} to {end}"
+                )
     except sqlite3.Error as e:
         logging.error(f"Error adding vacation: {e}")
         sys.exit(1)
@@ -270,8 +289,10 @@ def delete_vacation(vacation_id):
             conn.commit()
 
             # Check if it was a single day vacation
-            if vacation['start_date'] == vacation['end_date']:
-                logging.info(f"Deleted single day vacation for {vacation['mail']} on {vacation['start_date']}")
+            if vacation["start_date"] == vacation["end_date"]:
+                logging.info(
+                    f"Deleted single day vacation for {vacation['mail']} on {vacation['start_date']}"
+                )
             else:
                 logging.info(
                     f"Deleted vacation period for {vacation['mail']} from {vacation['start_date']} to {vacation['end_date']}"
@@ -303,7 +324,9 @@ def main():
     add_vacation_parser = subparsers.add_parser("add", help="Add a new vacation period")
     add_vacation_parser.add_argument("user", help="User ID or email address")
     add_vacation_parser.add_argument("start_date", help="Start date (YYYY-MM-DD)")
-    add_vacation_parser.add_argument("end_date", help="End date (YYYY-MM-DD)", nargs='?', default=None)
+    add_vacation_parser.add_argument(
+        "end_date", help="End date (YYYY-MM-DD)", nargs="?", default=None
+    )
 
     # Delete vacation command
     delete_vacation_parser = subparsers.add_parser(

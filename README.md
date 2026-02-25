@@ -8,6 +8,55 @@ The script will call the triggering webhook and send an email address as paramet
 
 The script will also take vacation times and holidays into consideration.
 
+## Multi-Tenant Support
+
+The application supports multiple tenants (teams/departments), each with:
+- Their own users and selection history
+- Separate Slack webhook URLs for notifications
+- Different holiday regions (German states)
+- Independent catcher selection
+
+### Running with Multiple Tenants
+
+```bash
+# Process all active tenants (default)
+uv run catcher_weighted.py
+
+# Process specific tenant
+uv run catcher_weighted.py --tenant "Team Alpha"
+
+# Dry run for specific tenant
+uv run catcher_weighted.py --tenant "Team Alpha" --dry-run
+```
+
+### Managing Tenants
+
+```bash
+# List all tenants
+uv run manage_tenants.py list
+
+# Add a new tenant
+uv run manage_tenants.py add "Team Beta" "BY" "https://hooks.slack.com/workflows/..."
+
+# Update tenant
+uv run manage_tenants.py update "Team Beta" --location "BW"
+
+# Deactivate/activate tenant
+uv run manage_tenants.py deactivate "Team Beta"
+uv run manage_tenants.py activate "Team Beta"
+```
+
+### Migrating to Multi-Tenant
+
+If you're upgrading from a single-tenant installation:
+
+```bash
+# Run the migration script
+uv run migrate_to_tenants.py
+```
+
+This creates a default tenant "Team Challengers" and assigns all existing users to it.
+
 ## Selection Algorithm
 
 The system uses a sophisticated weighted selection algorithm that:
@@ -15,6 +64,7 @@ The system uses a sophisticated weighted selection algorithm that:
 - Avoids consecutive day assignments when alternatives exist  
 - Balances workload based on recent selection frequency
 - Handles ties intelligently with deterministic tie-breaking
+- Operates independently per tenant
 
 For detailed information about the algorithm, see [WEIGHTED_ALGORITHM.md](WEIGHTED_ALGORITHM.md).
 
@@ -31,19 +81,21 @@ uv run app.py
 # Test webhook functionality
 uv run test_webhooks.py
 
-# Run the catcher script
+# Run the catcher script (processes all active tenants)
 uv run catcher_weighted.py
 
 # Run with options
 uv run catcher_weighted.py --dry-run          # Test without making changes
 uv run catcher_weighted.py --debug-weights    # Show weight calculations
 uv run catcher_weighted.py --force-notify     # Send notification even if catcher already selected
+uv run catcher_weighted.py --tenant "Team"    # Process specific tenant
 ```
 
 ### Option 2: Traditional Installation
 
 1. Run the script setup.sh. This will setup the database schema and a cronjob to run the catcher.py script every work-day at 7:30.
 2. If you're upgrading from a previous version, run `python migrate_vacations.py` to update the database schema for multiple vacation periods.
+3. For multi-tenant support, run `python migrate_to_tenants.py` to add tenant support.
 
 ## Configuration
 

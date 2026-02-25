@@ -63,6 +63,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Send notification even if catcher was already selected today",
     )
+    parser.add_argument(
+        "--tenant",
+        type=str,
+        help="Process specific tenant by name (if not specified, processes all active tenants)",
+    )
     return parser.parse_args()
 
 
@@ -109,6 +114,128 @@ def validate_environment() -> None:
     logging.debug("Environment validation successful")
 
 
+def get_tenant_by_name(conn: sqlite3.Connection, name: str) -> Optional[Dict]:
+    """
+    Get tenant by name.
+
+    Args:
+        conn: Database connection
+        name: Tenant name
+
+    Returns:
+        Tenant dict or None if not found
+    """
+    cursor = conn.execute(
+        "SELECT id, name, location, webhook_url, active FROM tenants WHERE name = ?",
+        (name,),
+    )
+    row = cursor.fetchone()
+    if row:
+        return {
+            "id": row[0],
+            "name": row[1],
+            "location": row[2],
+            "webhook_url": row[3],
+            "active": row[4],
+        }
+    return None
+
+
+def get_active_tenants(conn: sqlite3.Connection) -> List[Dict]:
+    """
+    Get all active tenants.
+
+    Args:
+        conn: Database connection
+
+    Returns:
+        List of tenant dicts
+    """
+    cursor = conn.execute(
+        "SELECT id, name, location, webhook_url, active FROM tenants WHERE active = 1 ORDER BY id"
+    )
+    tenants = []
+    for row in cursor.fetchall():
+        tenants.append(
+            {
+                "id": row[0],
+                "name": row[1],
+                "location": row[2],
+                "webhook_url": row[3],
+                "active": row[4],
+            }
+        )
+    return tenants
+
+
+def process_tenant(
+    conn: sqlite3.Connection,
+    tenant: Dict,
+    dry_run: bool = False,
+    debug_weights: bool = False,
+    force_notify: bool = False,
+) -> bool:
+    """
+    Process catcher selection for a single tenant.
+
+    Args:
+        conn: Database connection
+        tenant: Tenant dict
+        dry_run: If True, don't make changes
+        debug_weights: If True, show weight calculations
+        force_notify: If True, send notification even if already selected
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        logging.info(f"[{tenant['name']}] Starting selection...")
+
+        # Check if today is a non-working day
+        if is_weekend():
+            logging.info(f"[{tenant['name']}] Today is a weekend, no catcher needed")
+            return True
+
+        if is_holiday(tenant["location"]):
+            logging.info(f"[{tenant['name']}] Today is a holiday, no catcher needed")
+            return True
+
+        # Find next catcher using weighted algorithm
+        mail, is_new_selection = find_next_catcher_weighted(
+            conn=conn,
+            tenant_id=tenant["id"],
+            dry_run=dry_run,
+            debug_weights=debug_weights,
+        )
+
+        if mail:
+            if is_new_selection or force_notify:
+                # Trigger Slack if this is a new selection or force-notify is enabled
+                success = trigger_slack(
+                    mail, webhook_url=tenant["webhook_url"], dry_run=dry_run
+                )
+                if success:
+                    logging.info(
+                        f"[{tenant['name']}] Successfully notified catcher: {mail}"
+                    )
+                else:
+                    logging.error(
+                        f"[{tenant['name']}] Failed to notify catcher: {mail}"
+                    )
+            else:
+                logging.info(
+                    f"[{tenant['name']}] Using previously selected catcher: {mail}"
+                )
+            return True
+        else:
+            logging.warning(f"[{tenant['name']}] No catcher found for today")
+            return False
+
+    except Exception as e:
+        logging.error(f"[{tenant['name']}] Error processing tenant: {e}", exc_info=True)
+        return False
+
+
 def is_weekend() -> bool:
     """
     Check if today is a weekend (Saturday or Sunday).
@@ -119,14 +246,20 @@ def is_weekend() -> bool:
     return datetime.datetime.now().weekday() >= 5  # 5 = Saturday, 6 = Sunday
 
 
-def is_holiday() -> bool:
+def is_holiday(location: str = None) -> bool:
     """
-    Check if today is a public holiday in Germany (Baden-Württemberg).
+    Check if today is a public holiday in Germany.
     First tries the web service API, then falls back to the holidays library.
+
+    Args:
+        location: German state code (e.g., 'BW', 'BY'). If None, uses HOLIDAY_REGION env var.
 
     Returns:
         bool: True if today is a public holiday, False otherwise
     """
+    if location is None:
+        location = HOLIDAY_REGION
+
     # First try the web service
     try:
         response = requests.get(HOLIDAY_API_URL, timeout=HOLIDAY_TIMEOUT)
@@ -146,18 +279,18 @@ def is_holiday() -> bool:
 
     # Fallback to holidays library
     try:
-        # Create holidays object for Germany with configurable state
-        german_holidays = holidays.Germany(state=HOLIDAY_REGION)
+        # Create holidays object for Germany with specified subdivision
+        german_holidays = holidays.Germany(subdiv=location)
         today = datetime.date.today()
 
         if today in german_holidays:
             holiday_name = german_holidays.get(today)
             logging.info(
-                f"Holiday detected via fallback library ({HOLIDAY_REGION}): {holiday_name}"
+                f"Holiday detected via fallback library ({location}): {holiday_name}"
             )
             return True
         else:
-            logging.debug(f"No holiday today (fallback library, {HOLIDAY_REGION})")
+            logging.debug(f"No holiday today (fallback library, {location})")
             return False
     except Exception as e:
         logging.error(f"Both holiday checking methods failed: {e}")
@@ -166,13 +299,18 @@ def is_holiday() -> bool:
 
 
 def trigger_slack(
-    mail: str, max_retries: int = 3, initial_retry_delay: int = 2, dry_run: bool = False
+    mail: str,
+    webhook_url: str = None,
+    max_retries: int = 3,
+    initial_retry_delay: int = 2,
+    dry_run: bool = False,
 ) -> bool:
     """
     Trigger a Slack notification for the specified user.
 
     Args:
         mail: The email address of the user to be notified
+        webhook_url: Slack webhook URL (if None, uses SLACK_WEBHOOK_URL env var)
         max_retries: Maximum number of retry attempts
         initial_retry_delay: Initial delay between retries in seconds
         dry_run: If True, skip actual notification sending
@@ -191,9 +329,11 @@ def trigger_slack(
     data: Dict[str, str] = {"uid": mail}
     headers: Dict[str, str] = {"Content-type": "application/json"}
 
-    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+    if webhook_url is None:
+        webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+
     if not webhook_url:
-        logging.error("SLACK_WEBHOOK_URL environment variable not set")
+        logging.error("SLACK_WEBHOOK_URL not provided and environment variable not set")
         return False
 
     for attempt in range(max_retries):
@@ -361,7 +501,7 @@ def get_last_working_day_catcher(conn: sqlite3.Connection) -> Optional[int]:
             # Check if it was a holiday
             try:
                 # Check with holidays library
-                german_holidays = holidays.Germany(state=HOLIDAY_REGION)
+                german_holidays = holidays.Germany(subdiv=HOLIDAY_REGION)
                 if check_date in german_holidays:
                     continue
             except Exception:
@@ -594,12 +734,17 @@ def calculate_user_weight(
 
 
 def find_next_catcher_weighted(
-    dry_run: bool = False, debug_weights: bool = False
+    conn: sqlite3.Connection = None,
+    tenant_id: int = None,
+    dry_run: bool = False,
+    debug_weights: bool = False,
 ) -> Tuple[Optional[str], bool]:
     """
     Find the next available user using weighted selection algorithm.
 
     Args:
+        conn: Database connection (if None, creates new connection)
+        tenant_id: Tenant ID to filter users by
         dry_run: If True, don't update the database
         debug_weights: If True, show weight calculations for all users
 
@@ -609,20 +754,40 @@ def find_next_catcher_weighted(
             - Boolean indicating if a new user was selected (True) or if we're using a previously selected user (False)
     """
     try:
-        with get_db_connection() as conn:
+        if conn is None:
+            conn = get_db_connection()
+            should_close = True
+        else:
+            should_close = False
+            # Ensure row_factory is set
+            if conn.row_factory is None:
+                conn.row_factory = sqlite3.Row
+
+        try:
             cur = conn.cursor()
             today = datetime.date.today().isoformat()
 
-            # Check if someone is already chosen for today
-            cur.execute(
-                """
-                SELECT u.mail 
-                FROM user u
-                JOIN selection_history sh ON u.id = sh.user_id
-                WHERE sh.selected_date = ?
-            """,
-                (today,),
-            )
+            # Check if someone is already chosen for today (filtered by tenant)
+            if tenant_id:
+                cur.execute(
+                    """
+                    SELECT u.mail 
+                    FROM user u
+                    JOIN selection_history sh ON u.id = sh.user_id
+                    WHERE sh.selected_date = ? AND u.tenant_id = ?
+                """,
+                    (today, tenant_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT u.mail 
+                    FROM user u
+                    JOIN selection_history sh ON u.id = sh.user_id
+                    WHERE sh.selected_date = ?
+                """,
+                    (today,),
+                )
 
             result = cur.fetchone()
             if result is not None:
@@ -632,15 +797,25 @@ def find_next_catcher_weighted(
             # Get current weekday (0-6, where 0 is Monday in SQLite's strftime)
             weekday = datetime.datetime.now().strftime("%w")
 
-            # Get all users who are available on this weekday
-            cur.execute(
-                """
-                SELECT id, mail, last_chosen
-                FROM user 
-                WHERE weekdays LIKE ?
-            """,
-                (f"%{weekday}%",),
-            )
+            # Get all users who are available on this weekday (filtered by tenant)
+            if tenant_id:
+                cur.execute(
+                    """
+                    SELECT id, mail, last_chosen
+                    FROM user 
+                    WHERE weekdays LIKE ? AND tenant_id = ?
+                """,
+                    (f"%{weekday}%", tenant_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id, mail, last_chosen
+                    FROM user 
+                    WHERE weekdays LIKE ?
+                """,
+                    (f"%{weekday}%",),
+                )
 
             all_users = cur.fetchall()
 
@@ -669,7 +844,6 @@ def find_next_catcher_weighted(
             weighted_users = []
 
             # Get total selection counts for balance calculation
-            user_ids = [user["id"] for user in available_users]
             total_selections_map = {}
             for user in available_users:
                 cur.execute(
@@ -784,6 +958,10 @@ def find_next_catcher_weighted(
 
             return selected_user["mail"], True
 
+        finally:
+            if should_close and conn:
+                conn.close()
+
     except sqlite3.Error as e:
         logging.error(f"Database error: {e}")
         return None, False
@@ -802,35 +980,51 @@ def main() -> None:
                 "[DRY RUN] Running in dry-run mode - no database changes or notifications will be sent"
             )
 
-        # Validate environment variables
-        validate_environment()
+        # Validate environment variables (not needed for tenant-specific webhooks anymore)
+        # validate_environment()
 
-        # Check if today is a non-working day
-        if is_weekend():
-            logging.info("Today is a weekend, no catcher needed")
-            return
+        # Connect to database
+        conn = sqlite3.connect(DATABASE_PATH)
 
-        if is_holiday():
-            logging.info("Today is a holiday, no catcher needed")
-            return
+        try:
+            # Determine which tenants to process
+            if args.tenant:
+                # Process specific tenant
+                tenant = get_tenant_by_name(conn, args.tenant)
+                if not tenant:
+                    logging.error(f"Tenant '{args.tenant}' not found")
+                    exit(1)
+                if not tenant["active"]:
+                    logging.error(f"Tenant '{args.tenant}' is inactive")
+                    exit(1)
 
-        # Find next catcher using weighted algorithm
-        mail, is_new_selection = find_next_catcher_weighted(
-            dry_run=args.dry_run, debug_weights=args.debug_weights
-        )
-
-        if mail:
-            if is_new_selection or args.force_notify:
-                # Trigger Slack if this is a new selection or force-notify is enabled
-                success = trigger_slack(mail, dry_run=args.dry_run)
-                if success:
-                    logging.info(f"Successfully notified catcher: {mail}")
-                else:
-                    logging.error(f"Failed to notify catcher: {mail}")
+                tenants_to_process = [tenant]
             else:
-                logging.info(f"Using previously selected catcher: {mail}")
-        else:
-            logging.warning("No catcher found for today")
+                # Process all active tenants
+                tenants_to_process = get_active_tenants(conn)
+                if not tenants_to_process:
+                    logging.warning("No active tenants found")
+                    return
+
+                logging.info(f"Processing {len(tenants_to_process)} active tenants")
+
+            # Process each tenant
+            success_count = 0
+            for tenant in tenants_to_process:
+                if process_tenant(
+                    conn, tenant, args.dry_run, args.debug_weights, args.force_notify
+                ):
+                    success_count += 1
+
+            # Log summary for multiple tenants
+            if len(tenants_to_process) > 1:
+                logging.info(
+                    f"Completed {success_count}/{len(tenants_to_process)} tenants successfully"
+                )
+
+        finally:
+            conn.close()
+
     except Exception as e:
         logging.error(f"Unexpected error: {e}", exc_info=True)
 
