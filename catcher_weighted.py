@@ -4,7 +4,9 @@
 # dependencies = [
 #    "requests>=2.25.0",
 #    "python-dotenv>=1.0.0",
-#    "holidays>=0.34"
+#    "holidays>=0.34",
+#    "icalendar>=7.0.0",
+#    "rapidfuzz>=3.0.0"
 # ]
 # ///
 
@@ -21,6 +23,14 @@ import random
 from typing import Optional, Dict, Tuple, List
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Import vacation sync
+try:
+    from vacation_sync import VacationSync
+    VACATION_SYNC_AVAILABLE = True
+except ImportError:
+    VACATION_SYNC_AVAILABLE = False
+    logging.warning("vacation_sync module not available, iCal sync disabled")
 
 
 # Load environment variables from .env file
@@ -126,7 +136,7 @@ def get_tenant_by_name(conn: sqlite3.Connection, name: str) -> Optional[Dict]:
         Tenant dict or None if not found
     """
     cursor = conn.execute(
-        "SELECT id, name, location, webhook_url, active FROM tenants WHERE name = ?",
+        "SELECT id, name, location, webhook_url, active, ical_url FROM tenants WHERE name = ?",
         (name,),
     )
     row = cursor.fetchone()
@@ -137,6 +147,7 @@ def get_tenant_by_name(conn: sqlite3.Connection, name: str) -> Optional[Dict]:
             "location": row[2],
             "webhook_url": row[3],
             "active": row[4],
+            "ical_url": row[5],
         }
     return None
 
@@ -152,7 +163,7 @@ def get_active_tenants(conn: sqlite3.Connection) -> List[Dict]:
         List of tenant dicts
     """
     cursor = conn.execute(
-        "SELECT id, name, location, webhook_url, active FROM tenants WHERE active = 1 ORDER BY id"
+        "SELECT id, name, location, webhook_url, active, ical_url FROM tenants WHERE active = 1 ORDER BY id"
     )
     tenants = []
     for row in cursor.fetchall():
@@ -163,6 +174,7 @@ def get_active_tenants(conn: sqlite3.Connection) -> List[Dict]:
                 "location": row[2],
                 "webhook_url": row[3],
                 "active": row[4],
+                "ical_url": row[5],
             }
         )
     return tenants
@@ -190,6 +202,23 @@ def process_tenant(
     """
     try:
         logging.info(f"[{tenant['name']}] Starting selection...")
+
+        # Sync vacations from iCal if configured
+        if VACATION_SYNC_AVAILABLE and tenant.get('ical_url'):
+            logging.info(f"[{tenant['name']}] Syncing vacations from iCal...")
+            try:
+                sync = VacationSync()
+                success, msg = sync.sync_tenant_vacations(
+                    tenant['id'], 
+                    tenant['name'], 
+                    tenant['ical_url']
+                )
+                if success:
+                    logging.info(f"[{tenant['name']}] {msg}")
+                else:
+                    logging.warning(f"[{tenant['name']}] {msg}")
+            except Exception as e:
+                logging.error(f"[{tenant['name']}] iCal sync failed: {e}")
 
         # Check if today is a non-working day
         if is_weekend():

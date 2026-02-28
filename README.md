@@ -41,10 +41,114 @@ uv run manage_tenants.py add "Team Beta" "BY" "https://hooks.slack.com/workflows
 # Update tenant
 uv run manage_tenants.py update "Team Beta" --location "BW"
 
+# Update tenant with iCal URL
+uv run manage_tenants.py update "Team Beta" --ical-url "https://calendar.example.com/ical/team-beta.ics"
+
+# Test iCal sync for a tenant
+uv run manage_tenants.py test-sync "Team Beta"
+
+# View sync status and logs
+uv run manage_tenants.py sync-status "Team Beta"
+
 # Deactivate/activate tenant
 uv run manage_tenants.py deactivate "Team Beta"
 uv run manage_tenants.py activate "Team Beta"
 ```
+
+## Automatic Vacation Sync via iCal
+
+The system supports automatic vacation synchronization from iCal/ICS calendar feeds. This eliminates the need for manual vacation entry.
+
+### How It Works
+
+1. Each tenant can have an iCal feed URL configured (e.g., from Google Calendar, Outlook, etc.)
+2. Before each catcher selection, the system automatically fetches and parses the calendar
+3. Vacation events are matched to users using fuzzy name matching
+4. The vacation database is updated automatically
+5. If the calendar is unreachable, cached vacation data is used as fallback
+
+### Setting Up iCal Sync
+
+1. **Get your calendar's iCal URL**:
+   - Google Calendar: Settings → Calendar Settings → Integrate Calendar → Secret address in iCal format
+   - Outlook: Calendar → Share → Publish → ICS link
+   - Other calendars: Look for "Export" or "Subscribe" options
+
+2. **Configure the tenant**:
+   ```bash
+   uv run manage_tenants.py update "Team Name" --ical-url "https://calendar.example.com/ical/feed.ics"
+   ```
+
+3. **Test the sync**:
+   ```bash
+   uv run manage_tenants.py test-sync "Team Name"
+   ```
+
+4. **Set display names for better matching** (optional but recommended):
+   ```bash
+   # List users
+   uv run manage_users.py list
+   
+   # Set display name/nickname
+   uv run manage_users.py set-display-name "john.doe@example.com" "Johnny"
+   ```
+
+### Calendar Event Format
+
+The system extracts names from calendar event titles using fuzzy matching. Examples of supported formats:
+
+- "Vacation - John Doe"
+- "OOO: Jane Smith"
+- "John - Urlaub"
+- "Out of office Victoria"
+
+The system automatically:
+- Removes common vacation keywords (vacation, OOO, PTO, urlaub, etc.)
+- Matches against user email addresses and display names
+- Handles nicknames and variations (e.g., "Vicka" matches "Victoria")
+
+### Configuration Options
+
+Add these to your `.env` file:
+
+```bash
+# iCal sync timeout in seconds (default: 10)
+ICAL_SYNC_TIMEOUT=10
+
+# Fuzzy match threshold 0-100 (default: 80)
+# Higher values require closer matches
+FUZZY_MATCH_THRESHOLD=80
+
+# Cache retention in hours (default: 24)
+ICAL_CACHE_RETENTION_HOURS=24
+```
+
+### Managing Users
+
+```bash
+# List all users
+uv run manage_users.py list
+
+# List users for specific tenant
+uv run manage_users.py list --tenant "Team Name"
+
+# Show user details
+uv run manage_users.py show "john.doe@example.com"
+
+# Set display name for better iCal matching
+uv run manage_users.py set-display-name "john.doe@example.com" "Johnny"
+```
+
+### Migration to iCal Sync
+
+If you're upgrading to use iCal sync:
+
+```bash
+# Run the migration script
+uv run migrate_ical_support.py
+```
+
+This adds the necessary database columns for iCal support. Your existing manual vacation entries will remain in the database until you're ready to switch to automatic sync.
 
 ### Migrating to Multi-Tenant
 

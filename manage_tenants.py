@@ -1,14 +1,29 @@
 #!/usr/bin/env -S uv run --script
 
 # /// script
-# dependencies = []
+# dependencies = [
+#    "python-dotenv>=1.0.0",
+#    "icalendar>=7.0.0",
+#    "rapidfuzz>=3.0.0",
+#    "requests>=2.25.0",
+# ]
 # ///
 
 import sqlite3
 import argparse
 import sys
 import os
+import logging
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 def get_db_path(args):
@@ -21,7 +36,7 @@ def get_db_path(args):
 def get_tenant_by_id_or_name(conn, identifier):
     """Get tenant by ID or name."""
     cursor = conn.execute(
-        "SELECT id, name, location, webhook_url, active FROM tenants WHERE id = ? OR name = ?",
+        "SELECT id, name, location, webhook_url, active, ical_url FROM tenants WHERE id = ? OR name = ?",
         (identifier if identifier.isdigit() else -1, identifier),
     )
     return cursor.fetchone()
@@ -31,7 +46,7 @@ def cmd_list(args):
     """List all tenants."""
     conn = sqlite3.connect(get_db_path(args))
 
-    query = "SELECT id, name, location, webhook_url, active FROM tenants"
+    query = "SELECT id, name, location, webhook_url, active, ical_url FROM tenants"
     if args.active_only:
         query += " WHERE active = 1"
     query += " ORDER BY id"
@@ -44,12 +59,13 @@ def cmd_list(args):
         print("No tenants found")
         return
 
-    print(f"{'ID':<5} {'Name':<30} {'Location':<10} {'Webhook URL':<50} {'Active':<8}")
+    print(f"{'ID':<5} {'Name':<30} {'Location':<10} {'Active':<8} {'iCal URL':<50}")
     print("-" * 103)
     for tenant in tenants:
         active_str = "Yes" if tenant[4] else "No"
+        ical_url = tenant[5] if tenant[5] else "(not set)"
         print(
-            f"{tenant[0]:<5} {tenant[1]:<30} {tenant[2]:<10} {tenant[3]:<50} {active_str:<8}"
+            f"{tenant[0]:<5} {tenant[1]:<30} {tenant[2]:<10} {active_str:<8} {ical_url:<50}"
         )
 
 
@@ -95,6 +111,9 @@ def cmd_update(args):
     if args.webhook:
         updates.append("webhook_url = ?")
         params.append(args.webhook)
+    if args.ical_url is not None:  # Allow empty string to clear
+        updates.append("ical_url = ?")
+        params.append(args.ical_url if args.ical_url else None)
 
     if not updates:
         print("Error: No fields to update", file=sys.stderr)
@@ -182,6 +201,82 @@ def cmd_delete(args):
     print(f"Tenant '{tenant[1]}' deleted")
 
 
+def cmd_test_sync(args):
+    """Test iCal sync for a tenant."""
+    try:
+        from vacation_sync import VacationSync
+    except ImportError:
+        print("Error: vacation_sync module not available", file=sys.stderr)
+        sys.exit(1)
+
+    conn = sqlite3.connect(get_db_path(args))
+    tenant = get_tenant_by_id_or_name(conn, args.identifier)
+    conn.close()
+
+    if not tenant:
+        print(f"Error: Tenant '{args.identifier}' not found", file=sys.stderr)
+        sys.exit(1)
+
+    tenant_id, tenant_name, location, webhook_url, active, ical_url = tenant
+
+    if not ical_url:
+        print(f"Error: Tenant '{tenant_name}' has no iCal URL configured", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Testing iCal sync for tenant '{tenant_name}'...")
+    print(f"iCal URL: {ical_url}")
+    print()
+
+    sync = VacationSync()
+    success, message = sync.sync_tenant_vacations(tenant_id, tenant_name, ical_url)
+
+    if success:
+        print(f"✓ Sync successful: {message}")
+    else:
+        print(f"✗ Sync failed: {message}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_sync_status(args):
+    """Show sync status and logs for a tenant."""
+    conn = sqlite3.connect(get_db_path(args))
+
+    tenant = get_tenant_by_id_or_name(conn, args.identifier)
+    if not tenant:
+        print(f"Error: Tenant '{args.identifier}' not found", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+
+    tenant_id, tenant_name = tenant[0], tenant[1]
+
+    # Get recent sync logs
+    cursor = conn.execute("""
+        SELECT sync_timestamp, status, events_processed, users_matched, error_message
+        FROM vacation_sync_log
+        WHERE tenant_id = ?
+        ORDER BY sync_timestamp DESC
+        LIMIT ?
+    """, (tenant_id, args.limit))
+
+    logs = cursor.fetchall()
+    conn.close()
+
+    if not logs:
+        print(f"No sync logs found for tenant '{tenant_name}'")
+        return
+
+    print(f"Sync logs for tenant '{tenant_name}':")
+    print()
+    print(f"{'Timestamp':<20} {'Status':<10} {'Events':<8} {'Matched':<8} {'Error':<50}")
+    print("-" * 96)
+
+    for log in logs:
+        timestamp, status, events, matched, error = log
+        error_str = error[:47] + "..." if error and len(error) > 50 else (error or "")
+        print(f"{timestamp:<20} {status:<10} {events:<8} {matched:<8} {error_str:<50}")
+
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage tenants for Catcher of the Day"
@@ -208,6 +303,7 @@ def main():
     update_parser.add_argument("--name", help="New tenant name")
     update_parser.add_argument("--location", help="New location")
     update_parser.add_argument("--webhook", help="New webhook URL")
+    update_parser.add_argument("--ical-url", help="iCal feed URL (use empty string to clear)")
 
     # Deactivate command
     deactivate_parser = subparsers.add_parser("deactivate", help="Deactivate a tenant")
@@ -224,6 +320,15 @@ def main():
         "--force", action="store_true", help="Force delete even if tenant has users"
     )
 
+    # Test sync command
+    test_sync_parser = subparsers.add_parser("test-sync", help="Test iCal sync for a tenant")
+    test_sync_parser.add_argument("identifier", help="Tenant ID or name")
+
+    # Sync status command
+    sync_status_parser = subparsers.add_parser("sync-status", help="Show sync logs for a tenant")
+    sync_status_parser.add_argument("identifier", help="Tenant ID or name")
+    sync_status_parser.add_argument("--limit", type=int, default=10, help="Number of logs to show (default: 10)")
+
     args = parser.parse_args()
 
     # Route to command handlers
@@ -239,6 +344,10 @@ def main():
         cmd_activate(args)
     elif args.command == "delete":
         cmd_delete(args)
+    elif args.command == "test-sync":
+        cmd_test_sync(args)
+    elif args.command == "sync-status":
+        cmd_sync_status(args)
 
 
 if __name__ == "__main__":
