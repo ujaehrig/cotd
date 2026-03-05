@@ -6,7 +6,7 @@ You need to set up the workflow in Slack via the workflow builder. Choose a webh
 
 The script will call the triggering webhook and send an email address as parameter. The email address is chosen from the database using an advanced weighted selection algorithm that ensures fairness while avoiding consecutive day assignments when possible.
 
-The script will also take vacation times and holidays into consideration.
+The script will also take vacation times and holidays into consideration. Old vacation entries are automatically cleaned up (default: 90 days retention).
 
 ## Multi-Tenant Support
 
@@ -224,6 +224,7 @@ SLACK_API_TIMEOUT=10
 
 # Database cleanup settings (optional)
 CLEANUP_RETENTION_DAYS=365  # Number of days to retain selection history
+VACATION_RETENTION_DAYS=90  # Number of days to retain past vacation entries (default: 90)
 ```
 
 **Holiday Region Codes**: The `HOLIDAY_REGION` setting uses German state codes for the fallback holiday library. Common codes include:

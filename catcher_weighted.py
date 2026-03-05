@@ -100,6 +100,38 @@ CLEANUP_RETENTION_DAYS = int(
     os.environ.get("CLEANUP_RETENTION_DAYS", "365")
 )  # Keep 1 year of history
 CLEANUP_PROBABILITY = 0.1  # 10% chance of running cleanup each day
+VACATION_RETENTION_DAYS = int(
+    os.environ.get("VACATION_RETENTION_DAYS", "90")
+)  # Keep 90 days of past vacations
+
+
+def cleanup_old_vacations(conn: sqlite3.Connection, dry_run: bool = False) -> None:
+    """
+    Delete vacation entries older than VACATION_RETENTION_DAYS.
+    
+    Args:
+        conn: Database connection
+        dry_run: If True, only log what would be deleted
+    """
+    cutoff_date = (datetime.datetime.now() - datetime.timedelta(days=VACATION_RETENTION_DAYS)).date()
+    
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COUNT(*) FROM vacation WHERE end_date < ?",
+        (cutoff_date,)
+    )
+    count = cursor.fetchone()[0]
+    
+    if count > 0:
+        if dry_run:
+            logging.info(f"[DRY RUN] Would delete {count} vacation entries older than {cutoff_date}")
+        else:
+            cursor.execute(
+                "DELETE FROM vacation WHERE end_date < ?",
+                (cutoff_date,)
+            )
+            conn.commit()
+            logging.info(f"Deleted {count} vacation entries older than {cutoff_date}")
 
 
 def validate_environment() -> None:
@@ -1016,6 +1048,9 @@ def main() -> None:
         conn = sqlite3.connect(DATABASE_PATH)
 
         try:
+            # Cleanup old vacations
+            cleanup_old_vacations(conn, args.dry_run)
+            
             # Determine which tenants to process
             if args.tenant:
                 # Process specific tenant
