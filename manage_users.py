@@ -122,6 +122,111 @@ def cmd_show(args):
     print(f"Tenant: {tenant_name}")
 
 
+def cmd_add(args):
+    """Add a new user."""
+    conn = sqlite3.connect(get_db_path(args))
+
+    # Check if user already exists
+    cursor = conn.execute("SELECT id FROM user WHERE mail = ?", (args.email,))
+    if cursor.fetchone():
+        print(f"Error: User with email '{args.email}' already exists", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+
+    # Get tenant ID
+    cursor = conn.execute(
+        "SELECT id FROM tenants WHERE name = ? OR id = ?",
+        (args.tenant, args.tenant if args.tenant.isdigit() else -1)
+    )
+    tenant_row = cursor.fetchone()
+    if not tenant_row:
+        print(f"Error: Tenant '{args.tenant}' not found", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+    tenant_id = tenant_row[0]
+
+    # Add user
+    weekdays = args.weekdays if args.weekdays else "0,1,2,3,4"
+    conn.execute(
+        "INSERT INTO user (mail, weekdays, tenant_id, display_name) VALUES (?, ?, ?, ?)",
+        (args.email, weekdays, tenant_id, args.display_name)
+    )
+    conn.commit()
+    conn.close()
+
+    print(f"User '{args.email}' added successfully")
+    print(f"Assigned to tenant: {args.tenant}")
+    if args.display_name:
+        print(f"Display name: {args.display_name}")
+
+
+def cmd_update(args):
+    """Update user details."""
+    conn = sqlite3.connect(get_db_path(args))
+
+    user = get_user_by_id_or_email(conn, args.identifier)
+    if not user:
+        print(f"Error: User '{args.identifier}' not found", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+
+    user_id, email = user[0], user[1]
+    updates = []
+    params = []
+
+    if args.email:
+        updates.append("mail = ?")
+        params.append(args.email)
+
+    if args.tenant:
+        cursor = conn.execute(
+            "SELECT id FROM tenants WHERE name = ? OR id = ?",
+            (args.tenant, args.tenant if args.tenant.isdigit() else -1)
+        )
+        tenant_row = cursor.fetchone()
+        if not tenant_row:
+            print(f"Error: Tenant '{args.tenant}' not found", file=sys.stderr)
+            conn.close()
+            sys.exit(1)
+        updates.append("tenant_id = ?")
+        params.append(tenant_row[0])
+
+    if args.weekdays:
+        updates.append("weekdays = ?")
+        params.append(args.weekdays)
+
+    if not updates:
+        print("Error: No updates specified", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+
+    params.append(user_id)
+    conn.execute(f"UPDATE user SET {', '.join(updates)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+    print(f"User '{email}' updated successfully")
+
+
+def cmd_delete(args):
+    """Delete a user."""
+    conn = sqlite3.connect(get_db_path(args))
+
+    user = get_user_by_id_or_email(conn, args.identifier)
+    if not user:
+        print(f"Error: User '{args.identifier}' not found", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+
+    user_id, email = user[0], user[1]
+
+    conn.execute("DELETE FROM user WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+    print(f"User '{email}' deleted successfully")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage users for Catcher of the Day"
@@ -143,6 +248,24 @@ def main():
     set_name_parser.add_argument("identifier", help="User ID or email")
     set_name_parser.add_argument("display_name", help="Display name/nickname (use empty string to clear)")
 
+    # Add command
+    add_parser = subparsers.add_parser("add", help="Add a new user")
+    add_parser.add_argument("email", help="User email address")
+    add_parser.add_argument("tenant", help="Tenant name or ID")
+    add_parser.add_argument("--weekdays", help="Available weekdays (default: 0,1,2,3,4 for Mon-Fri)")
+    add_parser.add_argument("--display-name", help="Display name/nickname")
+
+    # Update command
+    update_parser = subparsers.add_parser("update", help="Update user details")
+    update_parser.add_argument("identifier", help="User ID or email")
+    update_parser.add_argument("--email", help="New email address")
+    update_parser.add_argument("--tenant", help="New tenant name or ID")
+    update_parser.add_argument("--weekdays", help="New available weekdays")
+
+    # Delete command
+    delete_parser = subparsers.add_parser("delete", help="Delete a user")
+    delete_parser.add_argument("identifier", help="User ID or email")
+
     args = parser.parse_args()
 
     # Route to command handlers
@@ -152,6 +275,12 @@ def main():
         cmd_show(args)
     elif args.command == "set-display-name":
         cmd_set_display_name(args)
+    elif args.command == "add":
+        cmd_add(args)
+    elif args.command == "update":
+        cmd_update(args)
+    elif args.command == "delete":
+        cmd_delete(args)
 
 
 if __name__ == "__main__":
