@@ -113,7 +113,7 @@ def cleanup_old_vacations(conn: sqlite3.Connection, dry_run: bool = False) -> No
         conn: Database connection
         dry_run: If True, only log what would be deleted
     """
-    cutoff_date = (datetime.datetime.now() - datetime.timedelta(days=VACATION_RETENTION_DAYS)).date()
+    cutoff_date = (datetime.datetime.now() - datetime.timedelta(days=VACATION_RETENTION_DAYS)).date().isoformat()
     
     cursor = conn.cursor()
     cursor.execute(
@@ -132,28 +132,6 @@ def cleanup_old_vacations(conn: sqlite3.Connection, dry_run: bool = False) -> No
             )
             conn.commit()
             logging.info(f"Deleted {count} vacation entries older than {cutoff_date}")
-
-
-def validate_environment() -> None:
-    """
-    Validates that all required environment variables are set.
-    Exits the program with an error message if any are missing.
-    """
-    required_vars = {"SLACK_WEBHOOK_URL": "Slack webhook URL for notifications"}
-
-    missing_vars = []
-    for var, description in required_vars.items():
-        if not os.environ.get(var):
-            missing_vars.append(f"- {var}: {description}")
-
-    if missing_vars:
-        logging.error("Missing required environment variables:")
-        for var in missing_vars:
-            logging.error(var)
-        logging.error("Please set these variables in your .env file or environment")
-        exit(1)
-
-    logging.debug("Environment validation successful")
 
 
 def get_tenant_by_name(conn: sqlite3.Connection, name: str) -> Optional[Dict]:
@@ -361,7 +339,7 @@ def is_holiday(location: str = None) -> bool:
 
 def trigger_slack(
     mail: str,
-    webhook_url: str = None,
+    webhook_url: str,
     max_retries: int = 3,
     initial_retry_delay: int = 2,
     dry_run: bool = False,
@@ -371,7 +349,7 @@ def trigger_slack(
 
     Args:
         mail: The email address of the user to be notified
-        webhook_url: Slack webhook URL (if None, uses SLACK_WEBHOOK_URL env var)
+        webhook_url: Slack webhook URL (configured per tenant)
         max_retries: Maximum number of retry attempts
         initial_retry_delay: Initial delay between retries in seconds
         dry_run: If True, skip actual notification sending
@@ -390,11 +368,8 @@ def trigger_slack(
     data: Dict[str, str] = {"uid": mail}
     headers: Dict[str, str] = {"Content-type": "application/json"}
 
-    if webhook_url is None:
-        webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
-
     if not webhook_url:
-        logging.error("SLACK_WEBHOOK_URL not provided and environment variable not set")
+        logging.error("No webhook URL configured for tenant")
         return False
 
     for attempt in range(max_retries):
@@ -1040,9 +1015,6 @@ def main() -> None:
             logging.info(
                 "[DRY RUN] Running in dry-run mode - no database changes or notifications will be sent"
             )
-
-        # Validate environment variables (not needed for tenant-specific webhooks anymore)
-        # validate_environment()
 
         # Connect to database
         conn = sqlite3.connect(DATABASE_PATH)
