@@ -146,7 +146,7 @@ def cmd_add(args):
     tenant_id = tenant_row[0]
 
     # Add user
-    weekdays = args.weekdays if args.weekdays else "0,1,2,3,4"
+    weekdays = args.weekdays if args.weekdays else "1,2,3,4,5"
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id, display_name) VALUES (?, ?, ?, ?)",
         (args.email, weekdays, tenant_id, args.display_name)
@@ -252,7 +252,7 @@ def main():
     add_parser = subparsers.add_parser("add", help="Add a new user")
     add_parser.add_argument("email", help="User email address")
     add_parser.add_argument("tenant", help="Tenant name or ID")
-    add_parser.add_argument("--weekdays", help="Available weekdays (default: 0,1,2,3,4 for Mon-Fri)")
+    add_parser.add_argument("--weekdays", help="Available weekdays (default: 1,2,3,4,5 for Mon-Fri)")
     add_parser.add_argument("--display-name", help="Display name/nickname")
 
     # Update command
