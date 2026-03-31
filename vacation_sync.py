@@ -223,7 +223,7 @@ class VacationSync:
             SELECT id, name, ical_url 
             FROM tenants 
             WHERE ical_url IS NOT NULL AND ical_url != ''
-            AND is_active = 1
+            AND active = 1
         """)
         
         tenants = cursor.fetchall()

@@ -135,9 +135,25 @@ uv run manage_users.py list --tenant "Team Name"
 # Show user details
 uv run manage_users.py show "john.doe@example.com"
 
-# Set display name for better iCal matching
+# Add a new user (tenant is required)
+uv run manage_users.py add "john.doe@example.com" "Team Name"
+
+# Add user with optional parameters
+uv run manage_users.py add "john.doe@example.com" "Team Name" --weekdays "0,1,2,3,4" --display-name "Johnny"
+
+# Update user details
+uv run manage_users.py update "john.doe@example.com" --email "new@example.com"
+uv run manage_users.py update "john.doe@example.com" --tenant "Team Beta"
+uv run manage_users.py update "john.doe@example.com" --weekdays "0,1,2"
+
+# Set or update display name for better iCal matching
 uv run manage_users.py set-display-name "john.doe@example.com" "Johnny"
+
+# Delete a user
+uv run manage_users.py delete "john.doe@example.com"
 ```
+
+**Note**: All user commands accept either email address or user ID as identifier.
 
 ### Migration to iCal Sync
 
@@ -205,11 +221,6 @@ uv run catcher_weighted.py --tenant "Team"    # Process specific tenant
 
 Create a `.env` file in the project directory with the following variables:
 
-```
-SLACK_WEBHOOK_URL=https://hooks.slack.com/workflows/...
-```
-
-Optional configuration variables:
 ```
 # Database path (optional, defaults to user.db in the script directory)
 DB_PATH=/path/to/user.db
