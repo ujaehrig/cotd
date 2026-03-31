@@ -54,11 +54,7 @@ class ICalParser:
             print(f"Error fetching calendar from {url}: {e}")
             return None
 
-    def extract_events(
-        self, 
-        calendar: Calendar, 
-        start_date: date = None
-    ) -> List[Dict]:
+    def extract_events(self, calendar: Calendar, start_date: date = None) -> List[Dict]:
         """
         Extract vacation events from calendar.
 
@@ -78,39 +74,49 @@ class ICalParser:
                 continue
 
             try:
-                # Extract event data
-                title = str(component.get('summary', ''))
-                uid = str(component.get('uid', ''))
-                
+                # For Confluence calendars, only process leave entries
+                subcal_type = str(component.get("X-CONFLUENCE-SUBCALENDAR-TYPE", ""))
+                if subcal_type and subcal_type.lower() != "leaves":
+                    continue
+
+                uid = str(component.get("uid", ""))
+
+                # Prefer ATTENDEE CN as the person's name (Confluence sets this reliably)
+                attendee = component.get("attendee")
+                if attendee and hasattr(attendee, "params"):
+                    title = attendee.params.get("CN", "")
+                else:
+                    title = ""
+
+                # Fall back to SUMMARY if no CN found
+                if not title:
+                    title = str(component.get("summary", ""))
+
                 # Handle start date
-                dtstart = component.get('dtstart')
+                dtstart = component.get("dtstart")
                 if dtstart is None:
                     continue
-                
+
                 start = dtstart.dt
                 if isinstance(start, datetime):
                     start = start.date()
-                
+
                 # Handle end date
-                dtend = component.get('dtend')
+                dtend = component.get("dtend")
                 if dtend:
                     end = dtend.dt
                     if isinstance(end, datetime):
                         end = end.date()
                 else:
-                    # If no end date, assume single day
                     end = start
 
                 # Filter out past events
                 if end < start_date:
                     continue
 
-                events.append({
-                    'title': title,
-                    'start_date': start,
-                    'end_date': end,
-                    'uid': uid
-                })
+                events.append(
+                    {"title": title, "start_date": start, "end_date": end, "uid": uid}
+                )
 
             except Exception as e:
                 print(f"Error parsing event: {e}")
@@ -122,10 +128,10 @@ class ICalParser:
 if __name__ == "__main__":
     # Simple test with a public holiday calendar
     parser = ICalParser()
-    
+
     # Test with a sample ICS URL (German holidays)
     test_url = "https://www.calendarlabs.com/ical-calendar/ics/76/US_Holidays.ics"
-    
+
     cal = parser.fetch_calendar(test_url)
     if cal:
         events = parser.extract_events(cal)
