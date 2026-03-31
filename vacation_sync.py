@@ -134,7 +134,7 @@ class VacationSync:
                         user_id,
                         event['start_date'].isoformat(),
                         event['end_date'].isoformat(),
-                        sync_time,
+                        sync_time.isoformat(),
                         event['uid']
                     ))
                     matched_count += 1
