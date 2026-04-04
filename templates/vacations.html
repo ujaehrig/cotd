@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Vacations - Vacation Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-umbrella-beach me-2"></i>Vacation Periods</h2>
+    <a href="{{ url_for('add_vacation') }}" class="btn btn-success">
+        <i class="fas fa-plus me-1"></i>Add Vacation
+    </a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h6><i class="fas fa-filter me-2"></i>Filter by User</h6>
+        <form method="GET" class="row g-3">
+            <div class="col-md-8">
+                <select name="user" class="form-select">
+                    <option value="">All Users</option>
+                    {% for user in users %}
+                        <option value="{{ user.id }}" {% if user_filter == user.id|string %}selected{% endif %}>
+                            {{ user.mail }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search me-1"></i>Filter
+                </button>
+                <a href="{{ url_for('vacations') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times me-1"></i>Clear
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if vacations %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>User</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
+                            <th>Duration</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for vacation in vacations %}
+                        <tr>
+                            <td>{{ vacation.id }}</td>
+                            <td>
+                                <i class="fas fa-user me-2"></i>{{ vacation.mail }}
+                            </td>
+                            <td>
+                                <span class="badge bg-primary">{{ vacation.start_date }}</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-primary">{{ vacation.end_date }}</span>
+                            </td>
+                            <td>
+                                {% if vacation.start_date == vacation.end_date %}
+                                    <span class="badge bg-info">Single Day</span>
+                                {% else %}
+                                    <span class="badge bg-success">
+                                        {{ (vacation.end_date | strptime('%Y-%m-%d') - vacation.start_date | strptime('%Y-%m-%d')).days + 1 }} days
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        onclick="confirmDelete({{ vacation.id }}, '{{ vacation.mail }}', '{{ vacation.start_date }}', '{{ vacation.end_date }}')">
+                                    <i class="fas fa-trash me-1"></i>Delete
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-umbrella-beach fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No vacation periods found</h4>
+                {% if user_filter %}
+                    <p class="text-muted">No vacation periods found for the selected user.</p>
+                {% else %}
+                    <p class="text-muted">There are no vacation periods in the system yet.</p>
+                {% endif %}
+                <a href="{{ url_for('add_vacation') }}" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i>Add First Vacation
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2 text-warning"></i>Confirm Delete
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this vacation period?</p>
+                <div class="alert alert-info">
+                    <strong>User:</strong> <span id="deleteUserEmail"></span><br>
+                    <strong>Period:</strong> <span id="deletePeriod"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" style="display: inline;" id="deleteForm">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i>Delete
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function confirmDelete(vacationId, userEmail, startDate, endDate) {
+    document.getElementById('deleteUserEmail').textContent = userEmail;
+    
+    let period = startDate;
+    if (startDate !== endDate) {
+        period += ' to ' + endDate;
+    }
+    document.getElementById('deletePeriod').textContent = period;
+    
+    document.getElementById('deleteForm').action = '{{ url_for("delete_vacation", vacation_id=0) }}'.replace('0', vacationId);
+    
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
+{% endblock %}

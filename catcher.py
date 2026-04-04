@@ -3,17 +3,21 @@
 # /// script
 # dependencies = [
 #    "requests>=2.25.0",
-#    "python-dotenv>=1.0.0"
+#    "python-dotenv>=1.0.0",
+#    "holidays>=0.34"
 # ]
 # ///
 
 import os
+import sys
 import json
 import requests
 import sqlite3
 import logging
 import time
 import datetime
+import holidays
+import argparse
 from typing import Optional, Dict, Tuple
 from pathlib import Path
 from dotenv import load_dotenv
@@ -23,13 +27,31 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.StreamHandler(),
+        logging.StreamHandler(sys.stdout),
         logging.FileHandler(Path(__file__).parent / "catcher.log"),
     ],
 )
 
 # Load environment variables from .env file
 load_dotenv()
+
+
+def parse_arguments() -> argparse.Namespace:
+    """
+    Parse command line arguments.
+    
+    Returns:
+        argparse.Namespace: Parsed arguments
+    """
+    parser = argparse.ArgumentParser(
+        description="Catcher of the Day - Select and notify the daily catcher"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Perform all checks without updating database or sending notifications"
+    )
+    return parser.parse_args()
 
 # Constants
 DATABASE_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
@@ -38,6 +60,7 @@ HOLIDAY_API_URL = os.environ.get(
     "https://date.nager.at/Api/v3/IsTodayPublicHoliday/DE?countyCode=DE-BW",
 )
 HOLIDAY_TIMEOUT = int(os.environ.get("HOLIDAY_API_TIMEOUT", "5"))  # seconds
+HOLIDAY_REGION = os.environ.get("HOLIDAY_REGION", "BW")  # German state code
 SLACK_TIMEOUT = int(os.environ.get("SLACK_API_TIMEOUT", "10"))  # seconds
 
 
@@ -76,23 +99,47 @@ def is_weekend() -> bool:
 def is_holiday() -> bool:
     """
     Check if today is a public holiday in Germany (Baden-Württemberg).
+    First tries the web service API, then falls back to the holidays library.
 
     Returns:
         bool: True if today is a public holiday, False otherwise
     """
+    # First try the web service
     try:
         response = requests.get(HOLIDAY_API_URL, timeout=HOLIDAY_TIMEOUT)
         if response.status_code == 200:
-            logging.info("Holiday detected")
+            logging.info("Holiday detected via web service")
             return True
-        return False
+        elif response.status_code == 204:
+            # 204 typically means "no holiday today"
+            logging.debug("No holiday today (web service)")
+            return False
+        else:
+            logging.warning(f"Web service returned unexpected status: {response.status_code}")
     except requests.exceptions.RequestException as e:
-        logging.error(f"Failed to check holiday status: {e}")
+        logging.warning(f"Web service failed, falling back to holidays library: {e}")
+    
+    # Fallback to holidays library
+    try:
+        # Create holidays object for Germany with configurable state
+        german_holidays = holidays.Germany(state=HOLIDAY_REGION)
+        today = datetime.date.today()
+        
+        if today in german_holidays:
+            holiday_name = german_holidays.get(today)
+            logging.info(f"Holiday detected via fallback library ({HOLIDAY_REGION}): {holiday_name}")
+            return True
+        else:
+            logging.debug(f"No holiday today (fallback library, {HOLIDAY_REGION})")
+            return False
+    except Exception as e:
+        logging.error(f"Both holiday checking methods failed: {e}")
+        # When in doubt, assume it's not a holiday to avoid missing work days
         return False
 
 
 def trigger_slack(
-    mail: str, max_retries: int = 3, initial_retry_delay: int = 2
+    mail: str, max_retries: int = 3, initial_retry_delay: int = 2, dry_run: bool = False
 ) -> bool:
     """
     Trigger a Slack notification for the specified user.
@@ -101,13 +148,18 @@ def trigger_slack(
         mail: The email address of the user to be notified
         max_retries: Maximum number of retry attempts
         initial_retry_delay: Initial delay between retries in seconds
+        dry_run: If True, skip actual notification sending
 
     Returns:
-        bool: True if notification was successful, False otherwise
+        bool: True if notification was successful (or skipped in dry-run), False otherwise
     """
     if not mail:
         logging.error("Cannot trigger Slack notification: mail is None")
         return False
+
+    if dry_run:
+        logging.info(f"[DRY RUN] Would send Slack notification to: {mail}")
+        return True
 
     data: Dict[str, str] = {"uid": mail}
     headers: Dict[str, str] = {"Content-type": "application/json"}
@@ -219,9 +271,12 @@ def is_user_on_vacation(conn: sqlite3.Connection, user_id: int, date: str) -> bo
         return False
 
 
-def find_next_catcher() -> Tuple[Optional[str], bool]:
+def find_next_catcher(dry_run: bool = False) -> Tuple[Optional[str], bool]:
     """
     Find the next available user to be the catcher of the day.
+
+    Args:
+        dry_run: If True, don't update the database
 
     Returns:
         Tuple[Optional[str], bool]: A tuple containing:
@@ -268,13 +323,16 @@ def find_next_catcher() -> Tuple[Optional[str], bool]:
             for user in available_users:
                 if not is_user_on_vacation(conn, user["id"], today):
                     # Found an available user who is not on vacation
-                    # Update the last_chosen date for the selected user
-                    cur.execute(
-                        "UPDATE user SET last_chosen = ? WHERE id = ?",
-                        (today, user["id"]),
-                    )
-                    conn.commit()
-                    logging.info(f"Selected new catcher: {user['mail']}")
+                    if dry_run:
+                        logging.info(f"[DRY RUN] Would update last_chosen date for: {user['mail']}")
+                    else:
+                        # Update the last_chosen date for the selected user
+                        cur.execute(
+                            "UPDATE user SET last_chosen = ? WHERE id = ?",
+                            (today, user["id"]),
+                        )
+                        conn.commit()
+                        logging.info(f"Selected new catcher: {user['mail']}")
                     return user["mail"], True
 
             logging.warning(
@@ -291,6 +349,12 @@ def main() -> None:
     Main function to run the Catcher of the Day process.
     """
     try:
+        # Parse command line arguments
+        args = parse_arguments()
+        
+        if args.dry_run:
+            logging.info("[DRY RUN] Running in dry-run mode - no database changes or notifications will be sent")
+        
         # Validate environment variables
         validate_environment()
 
@@ -304,11 +368,11 @@ def main() -> None:
             return
 
         # Find next catcher
-        mail, is_new_selection = find_next_catcher()
+        mail, is_new_selection = find_next_catcher(dry_run=args.dry_run)
         if mail:
             if is_new_selection:
                 # Only trigger Slack if this is a new selection
-                success = trigger_slack(mail)
+                success = trigger_slack(mail, dry_run=args.dry_run)
                 if success:
                     logging.info(f"Successfully notified catcher: {mail}")
                 else:
