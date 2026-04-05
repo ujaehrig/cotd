@@ -1,138 +1,101 @@
-#!/usr/bin/env -S uv run --script
+"""Tests for vacation validation functions in manage_vacations.py."""
 
-# /// script
-# dependencies = [
-#     "flask>=2.3.0",
-#     "flask-login>=0.6.0",
-#     "werkzeug>=2.3.0",
-#     "requests>=2.25.0",
-#     "python-dotenv>=1.0.0"
-# ]
-# ///
+import sqlite3
+import pytest
+from unittest.mock import patch
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from manage_vacations import check_vacation_overlap, check_duplicate_vacation
 
-from app import check_vacation_overlap, check_duplicate_vacation
-from manage_vacations import get_db_connection, add_vacation, delete_vacation
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+@pytest.fixture
+def db_with_vacation(tmp_path):
+    """Create a test DB with a user and one vacation."""
+    db_path = tmp_path / "test.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE user (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mail VARCHAR(50) UNIQUE NOT NULL,
+            weekdays VARCHAR(10),
+            last_chosen DATE
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE vacation (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES user(id)
+        )
+    """)
+    conn.execute(
+        "INSERT INTO user (mail, weekdays) VALUES ('test@example.com', '0,1,2,3,4')"
+    )
+    conn.execute(
+        "INSERT INTO vacation (user_id, start_date, end_date) VALUES (1, '2025-12-10', '2025-12-15')"
+    )
+    conn.commit()
+    conn.close()
+    return db_path
 
-def test_vacation_validation():
-    """Test vacation overlap and duplicate validation"""
-    
-    print("Testing Vacation Validation")
-    print("=" * 40)
-    
-    # Test user ID (assuming user 1 exists)
-    test_user_id = 1
-    
-    # Clean up any existing test vacations first
-    print("Cleaning up existing test vacations...")
-    try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM vacation WHERE user_id = ? AND start_date >= '2025-12-01'", (test_user_id,))
-            conn.commit()
-    except Exception as e:
-        print(f"Cleanup error (expected if no test data): {e}")
-    
-    # Test 1: Add initial vacation
-    print("\n1. Adding initial vacation: 2025-12-10 to 2025-12-15")
-    try:
-        add_vacation(test_user_id, "2025-12-10", "2025-12-15")
-        print("✓ Initial vacation added successfully")
-    except Exception as e:
-        print(f"✗ Error adding initial vacation: {e}")
-        return
-    
-    # Test 2: Check for exact duplicate
-    print("\n2. Testing exact duplicate detection...")
-    is_duplicate, error_msg = check_duplicate_vacation(test_user_id, "2025-12-10", "2025-12-15")
-    if is_duplicate:
-        print(f"✓ Duplicate detected: {error_msg}")
-    else:
-        print("✗ Duplicate not detected (should have been)")
-    
-    # Test 3: Check for overlap - starts before, ends during
-    print("\n3. Testing overlap detection (starts before, ends during)...")
-    has_overlap, error_msg = check_vacation_overlap(test_user_id, "2025-12-08", "2025-12-12")
-    if has_overlap:
-        print(f"✓ Overlap detected: {error_msg}")
-    else:
-        print("✗ Overlap not detected (should have been)")
-    
-    # Test 4: Check for overlap - starts during, ends after
-    print("\n4. Testing overlap detection (starts during, ends after)...")
-    has_overlap, error_msg = check_vacation_overlap(test_user_id, "2025-12-12", "2025-12-18")
-    if has_overlap:
-        print(f"✓ Overlap detected: {error_msg}")
-    else:
-        print("✗ Overlap not detected (should have been)")
-    
-    # Test 5: Check for overlap - completely contains existing
-    print("\n5. Testing overlap detection (completely contains existing)...")
-    has_overlap, error_msg = check_vacation_overlap(test_user_id, "2025-12-08", "2025-12-18")
-    if has_overlap:
-        print(f"✓ Overlap detected: {error_msg}")
-    else:
-        print("✗ Overlap not detected (should have been)")
-    
-    # Test 6: Check for overlap - completely contained within existing
-    print("\n6. Testing overlap detection (completely contained within existing)...")
-    has_overlap, error_msg = check_vacation_overlap(test_user_id, "2025-12-12", "2025-12-14")
-    if has_overlap:
-        print(f"✓ Overlap detected: {error_msg}")
-    else:
-        print("✗ Overlap not detected (should have been)")
-    
-    # Test 7: Check for no overlap - before existing
-    print("\n7. Testing no overlap (before existing vacation)...")
-    has_overlap, error_msg = check_vacation_overlap(test_user_id, "2025-12-05", "2025-12-08")
-    if not has_overlap:
-        print("✓ No overlap detected (correct)")
-    else:
-        print(f"✗ False overlap detected: {error_msg}")
-    
-    # Test 8: Check for no overlap - after existing
-    print("\n8. Testing no overlap (after existing vacation)...")
-    has_overlap, error_msg = check_vacation_overlap(test_user_id, "2025-12-17", "2025-12-20")
-    if not has_overlap:
-        print("✓ No overlap detected (correct)")
-    else:
-        print(f"✗ False overlap detected: {error_msg}")
-    
-    # Test 9: Add second vacation and test multiple overlaps
-    print("\n9. Adding second vacation and testing multiple overlaps...")
-    try:
-        add_vacation(test_user_id, "2025-12-25", "2025-12-25")  # Single day
-        print("✓ Second vacation added successfully")
-        
-        # Test overlap with multiple existing vacations
-        has_overlap, error_msg = check_vacation_overlap(test_user_id, "2025-12-12", "2025-12-26")
-        if has_overlap:
-            print(f"✓ Multiple overlaps detected: {error_msg}")
-        else:
-            print("✗ Multiple overlaps not detected (should have been)")
-            
-    except Exception as e:
-        print(f"✗ Error adding second vacation: {e}")
-    
-    # Cleanup
-    print("\n10. Cleaning up test data...")
-    try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM vacation WHERE user_id = ? AND start_date >= '2025-12-01'", (test_user_id,))
-            conn.commit()
-        print("✓ Test data cleaned up")
-    except Exception as e:
-        print(f"✗ Cleanup error: {e}")
-    
-    print("\nValidation test completed!")
 
-if __name__ == '__main__':
-    test_vacation_validation()
+@pytest.fixture(autouse=True)
+def mock_db(db_with_vacation):
+    """Patch get_db_connection to use the temp DB."""
+    def _get_conn():
+        conn = sqlite3.connect(db_with_vacation)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    with patch("manage_vacations.get_db_connection", _get_conn):
+        yield
+
+
+class TestCheckDuplicateVacation:
+    def test_exact_duplicate(self):
+        is_dup, msg = check_duplicate_vacation(1, "2025-12-10", "2025-12-15")
+        assert is_dup is True
+        assert "already have" in msg
+
+    def test_not_duplicate(self):
+        is_dup, _ = check_duplicate_vacation(1, "2025-12-20", "2025-12-25")
+        assert is_dup is False
+
+    def test_single_day_duplicate_message(self, db_with_vacation):
+        conn = sqlite3.connect(db_with_vacation)
+        conn.execute(
+            "INSERT INTO vacation (user_id, start_date, end_date) VALUES (1, '2025-12-25', '2025-12-25')"
+        )
+        conn.commit()
+        conn.close()
+        is_dup, msg = check_duplicate_vacation(1, "2025-12-25", "2025-12-25")
+        assert is_dup is True
+        assert "on 2025-12-25" in msg
+
+
+class TestCheckVacationOverlap:
+    def test_overlap_starts_before_ends_during(self):
+        has, msg = check_vacation_overlap(1, "2025-12-08", "2025-12-12")
+        assert has is True
+        assert "overlaps" in msg
+
+    def test_overlap_starts_during_ends_after(self):
+        has, _ = check_vacation_overlap(1, "2025-12-12", "2025-12-18")
+        assert has is True
+
+    def test_overlap_completely_contains(self):
+        has, _ = check_vacation_overlap(1, "2025-12-08", "2025-12-18")
+        assert has is True
+
+    def test_overlap_contained_within(self):
+        has, _ = check_vacation_overlap(1, "2025-12-12", "2025-12-14")
+        assert has is True
+
+    def test_no_overlap_before(self):
+        has, _ = check_vacation_overlap(1, "2025-12-05", "2025-12-08")
+        assert has is False
+
+    def test_no_overlap_after(self):
+        has, _ = check_vacation_overlap(1, "2025-12-17", "2025-12-20")
+        assert has is False

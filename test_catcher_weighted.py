@@ -72,8 +72,6 @@ def db(tmp_path):
     )
 
     # Seed users for Team Alpha (tenant_id=1)
-    today = datetime.date.today().isoformat()
-    weekday = str(datetime.datetime.now().weekday())
     conn.execute(
         "INSERT INTO user (mail, weekdays, last_chosen, tenant_id) VALUES (?, ?, ?, ?)",
         ("alice@example.com", "0,1,2,3,4", "2026-03-01", 1),
@@ -429,10 +427,8 @@ class TestProcessTenant:
 
 class TestFindNextCatcherWeighted:
     def test_selects_user_dry_run(self, db):
-        today = datetime.date.today()
-        weekday = str(today.weekday())
         # Ensure users are available on today's weekday
-        db.execute("UPDATE user SET weekdays = ?", (f"0,1,2,3,4,5,6",))
+        db.execute("UPDATE user SET weekdays = ?", ("0,1,2,3,4,5,6",))
         db.commit()
 
         with (

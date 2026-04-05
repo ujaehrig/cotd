@@ -7,7 +7,6 @@
 import sqlite3
 import os
 from pathlib import Path
-from datetime import datetime
 
 DATABASE_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
 

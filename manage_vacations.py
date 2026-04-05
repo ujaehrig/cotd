@@ -302,6 +302,92 @@ def delete_vacation(vacation_id):
         sys.exit(1)
 
 
+def check_vacation_overlap(
+    user_id: int, start_date: str, end_date: str
+) -> tuple[bool, str]:
+    """
+    Check if a vacation period overlaps with existing vacations for a user.
+
+    Args:
+        user_id: ID of the user
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+
+    Returns:
+        Tuple of (has_overlap, error_message)
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT start_date, end_date
+                FROM vacation
+                WHERE user_id = ?
+                AND (
+                    (start_date <= ? AND end_date >= ?) OR
+                    (start_date <= ? AND end_date >= ?) OR
+                    (start_date >= ? AND end_date <= ?)
+                )
+            """,
+                (user_id, end_date, start_date, end_date, start_date, start_date, end_date),
+            )
+            overlapping = cursor.fetchall()
+
+            if overlapping:
+                dates = []
+                for v in overlapping:
+                    if v["start_date"] == v["end_date"]:
+                        dates.append(v["start_date"])
+                    else:
+                        dates.append(f"{v['start_date']} to {v['end_date']}")
+                noun = "vacation" if len(dates) == 1 else "vacations"
+                return True, f"This vacation overlaps with your existing {noun}: {', '.join(dates)}"
+
+            return False, ""
+    except Exception as e:
+        logging.error(f"Error checking vacation overlap for user {user_id}: {e}")
+        return True, "Error checking for vacation conflicts. Please try again."
+
+
+def check_duplicate_vacation(
+    user_id: int, start_date: str, end_date: str
+) -> tuple[bool, str]:
+    """
+    Check if a vacation period is an exact duplicate of an existing vacation.
+
+    Args:
+        user_id: ID of the user
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+
+    Returns:
+        Tuple of (is_duplicate, error_message)
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT COUNT(*) as count
+                FROM vacation
+                WHERE user_id = ? AND start_date = ? AND end_date = ?
+            """,
+                (user_id, start_date, end_date),
+            )
+            result = cursor.fetchone()
+
+            if result["count"] > 0:
+                if start_date == end_date:
+                    return True, f"You already have a vacation on {start_date}"
+                return True, f"You already have a vacation from {start_date} to {end_date}"
+
+            return False, ""
+    except Exception as e:
+        logging.error(f"Error checking duplicate vacation for user {user_id}: {e}")
+        return True, "Error checking for duplicate vacations. Please try again."
+
+
 def main():
     parser = argparse.ArgumentParser(description="Manage vacation periods for users")
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")

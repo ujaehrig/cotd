@@ -16,7 +16,7 @@ Vacation sync module that orchestrates iCal fetching, user matching, and databas
 import os
 import sqlite3
 import logging
-from datetime import datetime, date
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Tuple
 from dotenv import load_dotenv

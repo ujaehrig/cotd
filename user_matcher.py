@@ -13,7 +13,7 @@ User matching module for fuzzy matching calendar event names to users.
 import os
 import re
 from typing import Optional, List, Tuple
-from rapidfuzz import fuzz, process
+from rapidfuzz import fuzz
 
 
 class UserMatcher:
