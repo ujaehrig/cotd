@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     location VARCHAR(10) NOT NULL,
     webhook_url VARCHAR(500) NOT NULL,
     active BOOLEAN DEFAULT 1,
+    ical_url VARCHAR(500),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

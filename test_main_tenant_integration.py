@@ -38,6 +38,17 @@ def test_db_with_tenants(tmp_path):
         "INSERT INTO tenants (name, location, webhook_url, active) VALUES (?, ?, ?, ?)",
         ("Team Inactive", "BE", "https://example.com/inactive", 0),
     )
+    # Create vacation table (needed by cleanup_old_vacations)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS vacation (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES user (id)
+        )
+    """)
+
     conn.commit()
     conn.close()
 

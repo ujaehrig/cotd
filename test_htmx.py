@@ -88,7 +88,6 @@ def test_htmx_endpoints():
         print(f"Add vacation POST HTMX response: {response.status_code}")
         
     # Clean up
-    os.close(db_fd)
     os.unlink(db_path)
     
     print("HTMX endpoints test completed!")
