@@ -16,6 +16,7 @@ import os
 import requests
 from datetime import datetime, date
 from typing import List, Dict, Optional
+from urllib.parse import urlsplit, urlunsplit
 from icalendar import Calendar
 from dotenv import load_dotenv
 
@@ -51,7 +52,9 @@ class ICalParser:
             response.raise_for_status()
             return Calendar.from_ical(response.content)
         except Exception as e:
-            print(f"Error fetching calendar from {url}: {e}")
+            parts = urlsplit(url)
+            safe_url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+            print(f"Error fetching calendar from {safe_url}: {e}")
             return None
 
     def extract_events(self, calendar: Calendar, start_date: date = None) -> List[Dict]:

@@ -12,6 +12,7 @@ Allows setting display names/nicknames for users.
 """
 
 import argparse
+import re
 import sys
 from dotenv import load_dotenv
 from db import DATABASE_PATH, get_db_connection
@@ -22,6 +23,13 @@ load_dotenv()
 def get_db_path(args):
     """Get database path from args or default."""
     return args.db if args.db else DATABASE_PATH
+
+
+def validate_weekdays(value):
+    """Validate weekdays is a comma-separated list of digits 0-6."""
+    if not re.match(r'^[0-6](,[0-6])*$', value):
+        print("Error: weekdays must be comma-separated digits 0-6 (0=Sun, 1=Mon, ..., 6=Sat)", file=sys.stderr)
+        sys.exit(1)
 
 
 def get_user_by_id_or_email(conn, identifier):
@@ -143,6 +151,7 @@ def cmd_add(args):
 
     # Add user
     weekdays = args.weekdays if args.weekdays else "1,2,3,4,5"
+    validate_weekdays(weekdays)
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id, display_name) VALUES (?, ?, ?, ?)",
         (args.email, weekdays, tenant_id, args.display_name)
@@ -188,6 +197,7 @@ def cmd_update(args):
         params.append(tenant_row[0])
 
     if args.weekdays:
+        validate_weekdays(args.weekdays)
         updates.append("weekdays = ?")
         params.append(args.weekdays)
 

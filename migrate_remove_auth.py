@@ -54,6 +54,7 @@ def main():
     dropped = []
     for col in COLUMNS_TO_DROP:
         if col in existing:
+            assert col.isidentifier(), f"Invalid column name: {col}"
             logging.info(f"Dropping column: {col}")
             cursor.execute(f"ALTER TABLE user DROP COLUMN {col}")
             dropped.append(col)

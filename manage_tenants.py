@@ -30,6 +30,26 @@ def get_db_path(args):
     return args.db if args.db else DATABASE_PATH
 
 
+def validate_url(url, field_name):
+    """Validate that a URL uses https:// scheme."""
+    if url and not url.startswith("https://"):
+        print(f"Error: {field_name} must use https:// scheme", file=sys.stderr)
+        sys.exit(1)
+
+
+VALID_LOCATIONS = {
+    "BW", "BY", "BE", "BB", "HB", "HH", "HE", "MV",
+    "NI", "NW", "RP", "SL", "SN", "ST", "SH", "TH",
+}
+
+
+def validate_location(location):
+    """Validate location is a known German state code."""
+    if location not in VALID_LOCATIONS:
+        print(f"Error: Invalid location '{location}'. Must be one of: {', '.join(sorted(VALID_LOCATIONS))}", file=sys.stderr)
+        sys.exit(1)
+
+
 def get_tenant_by_id_or_name(conn, identifier):
     """Get tenant by ID or name."""
     cursor = conn.execute(
@@ -68,6 +88,8 @@ def cmd_list(args):
 
 def cmd_add(args):
     """Add a new tenant."""
+    validate_url(args.webhook_url, "webhook_url")
+    validate_location(args.location)
     conn = get_db_connection(get_db_path(args))
 
     try:
@@ -103,12 +125,16 @@ def cmd_update(args):
         updates.append("name = ?")
         params.append(args.name)
     if args.location:
+        validate_location(args.location)
         updates.append("location = ?")
         params.append(args.location)
     if args.webhook:
+        validate_url(args.webhook, "webhook_url")
         updates.append("webhook_url = ?")
         params.append(args.webhook)
     if args.ical_url is not None:  # Allow empty string to clear
+        if args.ical_url:
+            validate_url(args.ical_url, "ical_url")
         updates.append("ical_url = ?")
         params.append(args.ical_url if args.ical_url else None)
 
