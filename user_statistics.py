@@ -4,26 +4,42 @@
 # dependencies = []
 # ///
 
+import argparse
 from db import get_db_connection
 
 
-def get_user_statistics():
+def get_user_statistics(tenant_name=None):
     """Generate selection statistics from selection_history, grouped by tenant."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT
-            t.name as tenant_name,
-            u.mail,
-            COUNT(sh.id) as total_selections,
-            MAX(sh.selected_date) as last_selection
-        FROM user u
-        LEFT JOIN selection_history sh ON u.id = sh.user_id
-        LEFT JOIN tenants t ON u.tenant_id = t.id
-        GROUP BY u.tenant_id, u.id, u.mail
-        ORDER BY t.name, total_selections DESC
-    """)
+    if tenant_name:
+        cursor.execute("""
+            SELECT
+                t.name as tenant_name,
+                u.mail,
+                COUNT(sh.id) as total_selections,
+                MAX(sh.selected_date) as last_selection
+            FROM user u
+            LEFT JOIN selection_history sh ON u.id = sh.user_id
+            LEFT JOIN tenants t ON u.tenant_id = t.id
+            WHERE t.name = ?
+            GROUP BY u.tenant_id, u.id, u.mail
+            ORDER BY total_selections DESC
+        """, (tenant_name,))
+    else:
+        cursor.execute("""
+            SELECT
+                t.name as tenant_name,
+                u.mail,
+                COUNT(sh.id) as total_selections,
+                MAX(sh.selected_date) as last_selection
+            FROM user u
+            LEFT JOIN selection_history sh ON u.id = sh.user_id
+            LEFT JOIN tenants t ON u.tenant_id = t.id
+            GROUP BY u.tenant_id, u.id, u.mail
+            ORDER BY t.name, total_selections DESC
+        """)
     results = cursor.fetchall()
     conn.close()
 
@@ -44,4 +60,7 @@ def get_user_statistics():
 
 
 if __name__ == "__main__":
-    get_user_statistics()
+    parser = argparse.ArgumentParser(description="Show selection statistics")
+    parser.add_argument("--tenant", help="Filter by tenant name")
+    args = parser.parse_args()
+    get_user_statistics(args.tenant)
