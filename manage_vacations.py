@@ -10,10 +10,9 @@ import sqlite3
 import argparse
 import logging
 import sys
-import os
-from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
+from db import get_db_connection
 
 # Load environment variables
 load_dotenv()
@@ -22,25 +21,6 @@ load_dotenv()
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
-
-# Database path
-DATABASE_PATH = Path(os.getenv("DB_PATH", str(Path(__file__).parent / "user.db")))
-
-
-def get_db_connection() -> sqlite3.Connection:
-    """Create and return a database connection."""
-    if not DATABASE_PATH.exists():
-        logging.error(f"Database file not found: {DATABASE_PATH}")
-        logging.error("Run setup.sh or create the database first")
-        sys.exit(1)
-
-    try:
-        conn = sqlite3.connect(DATABASE_PATH)
-        conn.row_factory = sqlite3.Row
-        return conn
-    except sqlite3.Error as e:
-        logging.error(f"Database connection error: {e}")
-        sys.exit(1)
 
 
 def validate_date(date_str: str) -> str:

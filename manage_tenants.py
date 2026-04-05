@@ -12,10 +12,9 @@
 import sqlite3
 import argparse
 import sys
-import os
 import logging
-from pathlib import Path
 from dotenv import load_dotenv
+from db import DATABASE_PATH, get_db_connection
 
 load_dotenv()
 
@@ -27,10 +26,8 @@ logging.basicConfig(
 
 
 def get_db_path(args):
-    """Get database path from args or environment."""
-    if args.db:
-        return args.db
-    return os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
+    """Get database path from args or default."""
+    return args.db if args.db else DATABASE_PATH
 
 
 def get_tenant_by_id_or_name(conn, identifier):
@@ -44,7 +41,7 @@ def get_tenant_by_id_or_name(conn, identifier):
 
 def cmd_list(args):
     """List all tenants."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     query = "SELECT id, name, location, webhook_url, active, ical_url FROM tenants"
     if args.active_only:
@@ -71,7 +68,7 @@ def cmd_list(args):
 
 def cmd_add(args):
     """Add a new tenant."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     try:
         conn.execute(
@@ -90,7 +87,7 @@ def cmd_add(args):
 
 def cmd_update(args):
     """Update an existing tenant."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     tenant = get_tenant_by_id_or_name(conn, args.identifier)
     if not tenant:
@@ -137,7 +134,7 @@ def cmd_update(args):
 
 def cmd_deactivate(args):
     """Deactivate a tenant."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     tenant = get_tenant_by_id_or_name(conn, args.identifier)
     if not tenant:
@@ -153,7 +150,7 @@ def cmd_deactivate(args):
 
 def cmd_activate(args):
     """Activate a tenant."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     tenant = get_tenant_by_id_or_name(conn, args.identifier)
     if not tenant:
@@ -169,7 +166,7 @@ def cmd_activate(args):
 
 def cmd_delete(args):
     """Delete a tenant."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     tenant = get_tenant_by_id_or_name(conn, args.identifier)
     if not tenant:
@@ -209,7 +206,7 @@ def cmd_test_sync(args):
         print("Error: vacation_sync module not available", file=sys.stderr)
         sys.exit(1)
 
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
     tenant = get_tenant_by_id_or_name(conn, args.identifier)
     conn.close()
 
@@ -239,7 +236,7 @@ def cmd_test_sync(args):
 
 def cmd_sync_status(args):
     """Show sync status and logs for a tenant."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     tenant = get_tenant_by_id_or_name(conn, args.identifier)
     if not tenant:

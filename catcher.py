@@ -24,6 +24,7 @@ import random
 from typing import Optional, Dict, Tuple, List
 from pathlib import Path
 from dotenv import load_dotenv
+from db import DATABASE_PATH, get_db_connection
 
 # Import vacation sync
 try:
@@ -83,7 +84,6 @@ def parse_arguments() -> argparse.Namespace:
 
 
 # Constants
-DATABASE_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
 HOLIDAY_API_BASE_URL = "https://date.nager.at/Api/v3/IsTodayPublicHoliday/DE"
 HOLIDAY_TIMEOUT = int(os.environ.get("HOLIDAY_API_TIMEOUT", "5"))  # seconds
 HOLIDAY_REGION = os.environ.get("HOLIDAY_REGION", "BW")  # German state code
@@ -421,25 +421,6 @@ def trigger_slack(
             return False
 
     return False
-
-
-def get_db_connection() -> sqlite3.Connection:
-    """
-    Create and return a database connection with proper settings.
-
-    Returns:
-        sqlite3.Connection: Database connection object
-
-    Raises:
-        sqlite3.Error: If there's an error connecting to the database
-    """
-    try:
-        conn = sqlite3.connect(DATABASE_PATH)
-        conn.row_factory = sqlite3.Row
-        return conn
-    except sqlite3.Error as e:
-        logging.error(f"Database connection error: {e}")
-        raise
 
 
 def cleanup_old_selection_history(

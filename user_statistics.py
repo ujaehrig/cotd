@@ -4,16 +4,12 @@
 # dependencies = []
 # ///
 
-import sqlite3
-import os
-from pathlib import Path
-
-DATABASE_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
+from db import get_db_connection
 
 
 def get_user_statistics():
     """Generate employment statistics from selection_history."""
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     query = """

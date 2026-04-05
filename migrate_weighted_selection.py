@@ -13,19 +13,13 @@ import sqlite3
 import logging
 import sys
 from pathlib import Path
+from db import DATABASE_PATH, get_db_connection
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
-
-DATABASE_PATH = "user.db"
-
-
-def get_db_connection():
-    """Create and return a database connection."""
-    return sqlite3.connect(DATABASE_PATH)
 
 
 def check_migration_needed(cursor):

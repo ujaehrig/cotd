@@ -13,11 +13,9 @@
 Vacation sync module that orchestrates iCal fetching, user matching, and database updates.
 """
 
-import os
 import sqlite3
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import Optional, List, Tuple
 from dotenv import load_dotenv
 
@@ -40,7 +38,8 @@ class VacationSync:
             db_path: Path to database file. If None, uses DB_PATH env var or default.
         """
         if db_path is None:
-            db_path = os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
+            from db import DATABASE_PATH
+            db_path = DATABASE_PATH
         self.db_path = db_path
         self.parser = ICalParser()
         self.matcher = UserMatcher()

@@ -14,6 +14,7 @@ import datetime
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from db import DATABASE_PATH, get_db_connection
 
 # Load environment variables
 load_dotenv()
@@ -24,7 +25,6 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-DATABASE_PATH = os.environ.get("DB_PATH", "user.db")
 DEFAULT_RETENTION_DAYS = int(os.environ.get("CLEANUP_RETENTION_DAYS", "365"))
 
 
@@ -45,11 +45,6 @@ def parse_arguments():
         help="Show what would be deleted without actually deleting"
     )
     return parser.parse_args()
-
-
-def get_db_connection():
-    """Create and return a database connection."""
-    return sqlite3.connect(DATABASE_PATH)
 
 
 def cleanup_selection_history(retention_days: int, dry_run: bool = False):

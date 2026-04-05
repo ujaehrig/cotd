@@ -18,20 +18,18 @@ The Flask web UI has been removed. These columns are no longer used:
 Requires SQLite 3.35.0+ (ALTER TABLE DROP COLUMN support).
 """
 
-import os
 import sqlite3
 import logging
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
+from db import DATABASE_PATH
 
 load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
-
-DATABASE_PATH = Path(os.getenv("DB_PATH", Path(__file__).parent / "user.db"))
 
 COLUMNS_TO_DROP = [
     "password_hash",
@@ -42,7 +40,7 @@ COLUMNS_TO_DROP = [
 
 
 def main():
-    if not DATABASE_PATH.exists():
+    if not Path(DATABASE_PATH).exists():
         logging.error(f"Database not found: {DATABASE_PATH}")
         sys.exit(1)
 

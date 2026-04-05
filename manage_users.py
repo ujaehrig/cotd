@@ -11,21 +11,17 @@ User management script for Catcher of the Day.
 Allows setting display names/nicknames for users.
 """
 
-import sqlite3
 import argparse
 import sys
-import os
-from pathlib import Path
 from dotenv import load_dotenv
+from db import DATABASE_PATH, get_db_connection
 
 load_dotenv()
 
 
 def get_db_path(args):
-    """Get database path from args or environment."""
-    if args.db:
-        return args.db
-    return os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
+    """Get database path from args or default."""
+    return args.db if args.db else DATABASE_PATH
 
 
 def get_user_by_id_or_email(conn, identifier):
@@ -39,7 +35,7 @@ def get_user_by_id_or_email(conn, identifier):
 
 def cmd_list(args):
     """List all users."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     query = """
         SELECT u.id, u.mail, u.display_name, t.name as tenant_name
@@ -71,7 +67,7 @@ def cmd_list(args):
 
 def cmd_set_display_name(args):
     """Set display name for a user."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     user = get_user_by_id_or_email(conn, args.identifier)
     if not user:
@@ -99,7 +95,7 @@ def cmd_set_display_name(args):
 
 def cmd_show(args):
     """Show details for a specific user."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     user = get_user_by_id_or_email(conn, args.identifier)
     if not user:
@@ -124,7 +120,7 @@ def cmd_show(args):
 
 def cmd_add(args):
     """Add a new user."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     # Check if user already exists
     cursor = conn.execute("SELECT id FROM user WHERE mail = ?", (args.email,))
@@ -162,7 +158,7 @@ def cmd_add(args):
 
 def cmd_update(args):
     """Update user details."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     user = get_user_by_id_or_email(conn, args.identifier)
     if not user:
@@ -210,7 +206,7 @@ def cmd_update(args):
 
 def cmd_delete(args):
     """Delete a user."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     user = get_user_by_id_or_email(conn, args.identifier)
     if not user:
