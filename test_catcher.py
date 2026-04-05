@@ -1,4 +1,4 @@
-"""Tests for catcher_weighted.py core functions."""
+"""Tests for catcher.py core functions."""
 
 import sqlite3
 import datetime
@@ -6,7 +6,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from catcher_weighted import (
+from catcher import (
     cleanup_old_vacations,
     get_tenant_by_name,
     get_active_tenants,
@@ -20,7 +20,7 @@ from catcher_weighted import (
     is_weekend,
     is_holiday,
     process_tenant,
-    find_next_catcher_weighted,
+    find_next_catcher,
 )
 
 
@@ -314,25 +314,25 @@ class TestTriggerSlack:
     def test_no_webhook_returns_false(self):
         assert trigger_slack("a@b.com", "") is False
 
-    @patch("catcher_weighted.requests.post")
+    @patch("catcher.requests.post")
     def test_success(self, mock_post):
         mock_post.return_value = MagicMock(status_code=200)
         assert trigger_slack("a@b.com", "https://hook") is True
 
-    @patch("catcher_weighted.requests.post")
+    @patch("catcher.requests.post")
     def test_client_error_no_retry(self, mock_post):
         mock_post.return_value = MagicMock(status_code=400, text="Bad Request")
         assert trigger_slack("a@b.com", "https://hook") is False
         assert mock_post.call_count == 1
 
-    @patch("catcher_weighted.requests.post")
-    @patch("catcher_weighted.time.sleep")
+    @patch("catcher.requests.post")
+    @patch("catcher.time.sleep")
     def test_server_error_retries(self, mock_sleep, mock_post):
         mock_post.return_value = MagicMock(status_code=500)
         assert trigger_slack("a@b.com", "https://hook", max_retries=2) is False
         assert mock_post.call_count == 2
 
-    @patch("catcher_weighted.requests.post")
+    @patch("catcher.requests.post")
     def test_request_exception(self, mock_post):
         import requests as req
         mock_post.side_effect = req.exceptions.ConnectionError("fail")
@@ -343,14 +343,14 @@ class TestTriggerSlack:
 
 
 class TestIsWeekend:
-    @patch("catcher_weighted.datetime")
+    @patch("catcher.datetime")
     def test_saturday(self, mock_dt):
         mock_dt.datetime.now.return_value.weekday.return_value = 5
         mock_dt.date = datetime.date
         mock_dt.timedelta = datetime.timedelta
         assert is_weekend() is True
 
-    @patch("catcher_weighted.datetime")
+    @patch("catcher.datetime")
     def test_monday(self, mock_dt):
         mock_dt.datetime.now.return_value.weekday.return_value = 0
         mock_dt.date = datetime.date
@@ -362,18 +362,18 @@ class TestIsWeekend:
 
 
 class TestIsHoliday:
-    @patch("catcher_weighted.requests.get")
+    @patch("catcher.requests.get")
     def test_api_returns_200_is_holiday(self, mock_get):
         mock_get.return_value = MagicMock(status_code=200)
         assert is_holiday("BW") is True
 
-    @patch("catcher_weighted.requests.get")
+    @patch("catcher.requests.get")
     def test_api_returns_204_not_holiday(self, mock_get):
         mock_get.return_value = MagicMock(status_code=204)
         assert is_holiday("BW") is False
 
-    @patch("catcher_weighted.holidays.Germany")
-    @patch("catcher_weighted.requests.get")
+    @patch("catcher.holidays.Germany")
+    @patch("catcher.requests.get")
     def test_api_failure_falls_back_to_library(self, mock_get, mock_holidays):
         import requests as req
         mock_get.side_effect = req.exceptions.ConnectionError("fail")
@@ -397,32 +397,32 @@ class TestProcessTenant:
             "ical_url": None,
         }
 
-    @patch("catcher_weighted.trigger_slack", return_value=True)
-    @patch("catcher_weighted.find_next_catcher_weighted", return_value=("alice@example.com", True))
-    @patch("catcher_weighted.is_holiday", return_value=False)
-    @patch("catcher_weighted.is_weekend", return_value=False)
+    @patch("catcher.trigger_slack", return_value=True)
+    @patch("catcher.find_next_catcher", return_value=("alice@example.com", True))
+    @patch("catcher.is_holiday", return_value=False)
+    @patch("catcher.is_weekend", return_value=False)
     def test_success(self, *mocks):
         db = MagicMock()
         assert process_tenant(db, self._tenant_dict(), dry_run=True) is True
 
-    @patch("catcher_weighted.is_weekend", return_value=True)
+    @patch("catcher.is_weekend", return_value=True)
     def test_weekend_returns_true(self, _):
         db = MagicMock()
         assert process_tenant(db, self._tenant_dict()) is True
 
-    @patch("catcher_weighted.is_holiday", return_value=True)
-    @patch("catcher_weighted.is_weekend", return_value=False)
+    @patch("catcher.is_holiday", return_value=True)
+    @patch("catcher.is_weekend", return_value=False)
     def test_holiday_returns_true(self, *_):
         db = MagicMock()
         assert process_tenant(db, self._tenant_dict()) is True
 
-    @patch("catcher_weighted.is_weekend", side_effect=Exception("boom"))
+    @patch("catcher.is_weekend", side_effect=Exception("boom"))
     def test_exception_returns_false(self, _):
         db = MagicMock()
         assert process_tenant(db, self._tenant_dict()) is False
 
 
-# --- find_next_catcher_weighted ---
+# --- find_next_catcher ---
 
 
 class TestFindNextCatcherWeighted:
@@ -432,10 +432,10 @@ class TestFindNextCatcherWeighted:
         db.commit()
 
         with (
-            patch("catcher_weighted.is_user_on_vacation", return_value=False),
-            patch("catcher_weighted.get_last_working_day_catcher", return_value=None),
+            patch("catcher.is_user_on_vacation", return_value=False),
+            patch("catcher.get_last_working_day_catcher", return_value=None),
         ):
-            mail, is_new = find_next_catcher_weighted(conn=db, tenant_id=1, dry_run=True)
+            mail, is_new = find_next_catcher(conn=db, tenant_id=1, dry_run=True)
             assert mail in ("alice@example.com", "bob@example.com")
             assert is_new is True
 
@@ -448,7 +448,7 @@ class TestFindNextCatcherWeighted:
         )
         db.commit()
 
-        mail, is_new = find_next_catcher_weighted(conn=db, tenant_id=1)
+        mail, is_new = find_next_catcher(conn=db, tenant_id=1)
         assert mail == "alice@example.com"
         assert is_new is False
 
@@ -458,6 +458,6 @@ class TestFindNextCatcherWeighted:
         db.execute("UPDATE user SET weekdays = ?", (impossible_day,))
         db.commit()
 
-        mail, is_new = find_next_catcher_weighted(conn=db, tenant_id=1)
+        mail, is_new = find_next_catcher(conn=db, tenant_id=1)
         assert mail is None
         assert is_new is False

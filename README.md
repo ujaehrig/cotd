@@ -29,13 +29,13 @@ with:
 
 ```bash
 # Process all active tenants (default)
-uv run catcher_weighted.py
+uv run catcher.py
 
 # Process specific tenant
-uv run catcher_weighted.py --tenant "Team Alpha"
+uv run catcher.py --tenant "Team Alpha"
 
 # Dry run for specific tenant
-uv run catcher_weighted.py --tenant "Team Alpha" --dry-run
+uv run catcher.py --tenant "Team Alpha" --dry-run
 ```
 
 ### Managing Tenants
@@ -194,13 +194,13 @@ automatically manage dependencies:
 
 ```bash
 # Run the catcher script (processes all active tenants)
-uv run catcher_weighted.py
+uv run catcher.py
 
 # Run with options
-uv run catcher_weighted.py --dry-run
-uv run catcher_weighted.py --debug-weights
-uv run catcher_weighted.py --force-notify
-uv run catcher_weighted.py --tenant "Team"
+uv run catcher.py --dry-run
+uv run catcher.py --debug-weights
+uv run catcher.py --force-notify
+uv run catcher.py --tenant "Team"
 ```
 
 For initial setup, run `setup.sh` to create the database schema and

@@ -13,7 +13,7 @@ Successfully implemented multi-tenant support for the "Catcher of the Day" appli
 - **Tests:** 19 passing (schema, migration, CLI)
 
 ### Phase 2: Core Script Integration ✅
-- Added `--tenant` parameter to `catcher_weighted.py`
+- Added `--tenant` parameter to `catcher.py`
 - Implemented tenant-based user filtering
 - Updated holiday detection to use tenant location
 - Modified notifications to use tenant-specific webhooks
@@ -45,13 +45,13 @@ Successfully implemented multi-tenant support for the "Catcher of the Day" appli
 ### Execution Modes
 ```bash
 # Process all active tenants (production)
-uv run catcher_weighted.py
+uv run catcher.py
 
 # Process specific tenant (testing/manual)
-uv run catcher_weighted.py --tenant "Team Alpha"
+uv run catcher.py --tenant "Team Alpha"
 
 # Dry run
-uv run catcher_weighted.py --dry-run
+uv run catcher.py --dry-run
 ```
 
 ### Tenant Management
@@ -96,7 +96,7 @@ uv run migrate_to_tenants.py
 
 ### Code Changes
 **Modified Files:**
-- `catcher_weighted.py` - Core tenant support
+- `catcher.py` - Core tenant support
 - `manage_vacations.py` - Tenant display
 - `README.md` - Documentation
 
@@ -173,7 +173,7 @@ uv run migrate_to_tenants.py
 ### Cron Job Setup
 ```cron
 # Single job processes all active tenants
-30 7 * * 1-5 cd /path/to/cotd && uv run catcher_weighted.py
+30 7 * * 1-5 cd /path/to/cotd && uv run catcher.py
 ```
 
 ## Future Enhancements (Optional)

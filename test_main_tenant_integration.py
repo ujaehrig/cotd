@@ -59,14 +59,14 @@ def test_main_with_specific_tenant(test_db_with_tenants):
     """Test main() processes specific tenant when --tenant is provided."""
     with (
         patch(
-            "sys.argv", ["catcher_weighted.py", "--tenant", "Team Alpha", "--dry-run"]
+            "sys.argv", ["catcher.py", "--tenant", "Team Alpha", "--dry-run"]
         ),
-        patch("catcher_weighted.DATABASE_PATH", str(test_db_with_tenants)),
-        patch("catcher_weighted.process_tenant") as mock_process,
+        patch("catcher.DATABASE_PATH", str(test_db_with_tenants)),
+        patch("catcher.process_tenant") as mock_process,
     ):
         mock_process.return_value = True
 
-        from catcher_weighted import main
+        from catcher import main
 
         main()
 
@@ -79,13 +79,13 @@ def test_main_with_specific_tenant(test_db_with_tenants):
 def test_main_with_all_tenants(test_db_with_tenants):
     """Test main() processes all active tenants when --tenant not provided."""
     with (
-        patch("sys.argv", ["catcher_weighted.py", "--dry-run"]),
-        patch("catcher_weighted.DATABASE_PATH", str(test_db_with_tenants)),
-        patch("catcher_weighted.process_tenant") as mock_process,
+        patch("sys.argv", ["catcher.py", "--dry-run"]),
+        patch("catcher.DATABASE_PATH", str(test_db_with_tenants)),
+        patch("catcher.process_tenant") as mock_process,
     ):
         mock_process.return_value = True
 
-        from catcher_weighted import main
+        from catcher import main
 
         main()
 
@@ -100,11 +100,11 @@ def test_main_with_all_tenants(test_db_with_tenants):
 def test_main_with_nonexistent_tenant(test_db_with_tenants, capsys):
     """Test main() exits with error when tenant not found."""
     with (
-        patch("sys.argv", ["catcher_weighted.py", "--tenant", "NonExistent"]),
-        patch("catcher_weighted.DATABASE_PATH", str(test_db_with_tenants)),
+        patch("sys.argv", ["catcher.py", "--tenant", "NonExistent"]),
+        patch("catcher.DATABASE_PATH", str(test_db_with_tenants)),
         pytest.raises(SystemExit),
     ):
-        from catcher_weighted import main
+        from catcher import main
 
         main()
 
@@ -112,11 +112,11 @@ def test_main_with_nonexistent_tenant(test_db_with_tenants, capsys):
 def test_main_with_inactive_tenant(test_db_with_tenants, capsys):
     """Test main() exits with error when tenant is inactive."""
     with (
-        patch("sys.argv", ["catcher_weighted.py", "--tenant", "Team Inactive"]),
-        patch("catcher_weighted.DATABASE_PATH", str(test_db_with_tenants)),
+        patch("sys.argv", ["catcher.py", "--tenant", "Team Inactive"]),
+        patch("catcher.DATABASE_PATH", str(test_db_with_tenants)),
         pytest.raises(SystemExit),
     ):
-        from catcher_weighted import main
+        from catcher import main
 
         main()
 
@@ -124,14 +124,14 @@ def test_main_with_inactive_tenant(test_db_with_tenants, capsys):
 def test_main_continues_on_tenant_failure(test_db_with_tenants):
     """Test main() continues processing other tenants if one fails."""
     with (
-        patch("sys.argv", ["catcher_weighted.py", "--dry-run"]),
-        patch("catcher_weighted.DATABASE_PATH", str(test_db_with_tenants)),
-        patch("catcher_weighted.process_tenant") as mock_process,
+        patch("sys.argv", ["catcher.py", "--dry-run"]),
+        patch("catcher.DATABASE_PATH", str(test_db_with_tenants)),
+        patch("catcher.process_tenant") as mock_process,
     ):
         # First tenant fails, second succeeds
         mock_process.side_effect = [False, True]
 
-        from catcher_weighted import main
+        from catcher import main
 
         main()
 
@@ -142,13 +142,13 @@ def test_main_continues_on_tenant_failure(test_db_with_tenants):
 def test_main_logs_summary_for_multiple_tenants(test_db_with_tenants, caplog):
     """Test main() logs summary when processing multiple tenants."""
     with (
-        patch("sys.argv", ["catcher_weighted.py", "--dry-run"]),
-        patch("catcher_weighted.DATABASE_PATH", str(test_db_with_tenants)),
-        patch("catcher_weighted.process_tenant") as mock_process,
+        patch("sys.argv", ["catcher.py", "--dry-run"]),
+        patch("catcher.DATABASE_PATH", str(test_db_with_tenants)),
+        patch("catcher.process_tenant") as mock_process,
     ):
         mock_process.return_value = True
 
-        from catcher_weighted import main
+        from catcher import main
         import logging
 
         with caplog.at_level(logging.INFO):
