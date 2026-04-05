@@ -60,11 +60,11 @@ def db_path(tmp_path):
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id, display_name) VALUES (?, ?, ?, ?)",
-        ("alice@example.com", "0,1,2,3,4", 1, "Alice Wonder"),
+        ("alice@example.com", "1,2,3,4,5", 1, "Alice Wonder"),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("bob@example.com", "0,1,2,3,4", 1),
+        ("bob@example.com", "1,2,3,4,5", 1),
     )
     conn.commit()
     conn.close()

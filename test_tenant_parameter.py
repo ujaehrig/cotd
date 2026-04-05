@@ -53,19 +53,19 @@ def test_db_with_tenants(tmp_path):
     # Add users to tenants
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("alpha1@example.com", "0,1,2,3,4", 1),
+        ("alpha1@example.com", "1,2,3,4,5", 1),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("alpha2@example.com", "0,1,2,3,4", 1),
+        ("alpha2@example.com", "1,2,3,4,5", 1),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("beta1@example.com", "0,1,2,3,4", 2),
+        ("beta1@example.com", "1,2,3,4,5", 2),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("beta2@example.com", "0,1,2,3,4", 2),
+        ("beta2@example.com", "1,2,3,4,5", 2),
     )
     conn.commit()
     conn.close()

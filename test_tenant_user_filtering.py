@@ -66,22 +66,22 @@ def test_db_with_tenant_users(tmp_path):
         )
     """)
 
-    # Add users to tenants
+    # Add users to tenants (available all days so tests don't depend on current weekday)
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("alpha1@example.com", "0,1,2,3,4", 1),
+        ("alpha1@example.com", "0,1,2,3,4,5,6", 1),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("alpha2@example.com", "0,1,2,3,4", 1),
+        ("alpha2@example.com", "0,1,2,3,4,5,6", 1),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("beta1@example.com", "0,1,2,3,4", 2),
+        ("beta1@example.com", "0,1,2,3,4,5,6", 2),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("beta2@example.com", "0,1,2,3,4", 2),
+        ("beta2@example.com", "0,1,2,3,4,5,6", 2),
     )
     conn.commit()
     conn.close()
@@ -191,8 +191,10 @@ def test_weekday_filtering_per_tenant(test_db_with_tenant_users):
 
     conn = sqlite3.connect(test_db_with_tenant_users)
 
-    # Update alpha1 to only work on weekends (5,6)
-    conn.execute("UPDATE user SET weekdays = ? WHERE id = ?", ("5,6", 1))
+    # Set alpha1 to only work on a day that is NOT today
+    today_weekday = datetime.datetime.now().strftime("%w")
+    other_day = "1" if today_weekday != "1" else "2"
+    conn.execute("UPDATE user SET weekdays = ? WHERE id = ?", (other_day, 1))
     conn.commit()
 
     with (

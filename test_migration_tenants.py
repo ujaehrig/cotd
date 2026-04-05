@@ -41,11 +41,11 @@ def existing_user_db(tmp_path):
     # Add some test users
     conn.execute(
         "INSERT INTO user (mail, weekdays) VALUES (?, ?)",
-        ("user1@example.com", "0,1,2,3,4"),
+        ("user1@example.com", "1,2,3,4,5"),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays) VALUES (?, ?)",
-        ("user2@example.com", "0,1,2,3,4"),
+        ("user2@example.com", "1,2,3,4,5"),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays) VALUES (?, ?)",

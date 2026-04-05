@@ -74,11 +74,11 @@ def db(tmp_path):
     # Seed users for Team Alpha (tenant_id=1)
     conn.execute(
         "INSERT INTO user (mail, weekdays, last_chosen, tenant_id) VALUES (?, ?, ?, ?)",
-        ("alice@example.com", "0,1,2,3,4", "2026-03-01", 1),
+        ("alice@example.com", "1,2,3,4,5", "2026-03-01", 1),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, last_chosen, tenant_id) VALUES (?, ?, ?, ?)",
-        ("bob@example.com", "0,1,2,3,4", "2026-03-20", 1),
+        ("bob@example.com", "1,2,3,4,5", "2026-03-20", 1),
     )
     conn.commit()
     yield conn

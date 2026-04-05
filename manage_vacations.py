@@ -24,7 +24,7 @@ logging.basicConfig(
 )
 
 # Database path
-DATABASE_PATH = Path(__file__).parent / os.getenv("DB_PATH", "user.db")
+DATABASE_PATH = Path(os.getenv("DB_PATH", str(Path(__file__).parent / "user.db")))
 
 
 def get_db_connection() -> sqlite3.Connection:

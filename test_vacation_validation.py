@@ -30,7 +30,7 @@ def db_with_vacation(tmp_path):
         )
     """)
     conn.execute(
-        "INSERT INTO user (mail, weekdays) VALUES ('test@example.com', '0,1,2,3,4')"
+        "INSERT INTO user (mail, weekdays) VALUES ('test@example.com', '1,2,3,4,5')"
     )
     conn.execute(
         "INSERT INTO vacation (user_id, start_date, end_date) VALUES (1, '2025-12-10', '2025-12-15')"

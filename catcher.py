@@ -11,6 +11,7 @@
 # ///
 
 import os
+import sys
 import json
 import requests
 import sqlite3
@@ -83,10 +84,7 @@ def parse_arguments() -> argparse.Namespace:
 
 # Constants
 DATABASE_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
-HOLIDAY_API_URL = os.environ.get(
-    "HOLIDAY_API_URL",
-    "https://date.nager.at/Api/v3/IsTodayPublicHoliday/DE?countyCode=DE-BW",
-)
+HOLIDAY_API_BASE_URL = "https://date.nager.at/Api/v3/IsTodayPublicHoliday/DE"
 HOLIDAY_TIMEOUT = int(os.environ.get("HOLIDAY_API_TIMEOUT", "5"))  # seconds
 HOLIDAY_REGION = os.environ.get("HOLIDAY_REGION", "BW")  # German state code
 SLACK_TIMEOUT = int(os.environ.get("SLACK_API_TIMEOUT", "10"))  # seconds
@@ -301,7 +299,8 @@ def is_holiday(location: str = None) -> bool:
 
     # First try the web service
     try:
-        response = requests.get(HOLIDAY_API_URL, timeout=HOLIDAY_TIMEOUT)
+        url = f"{HOLIDAY_API_BASE_URL}?countyCode=DE-{location}"
+        response = requests.get(url, timeout=HOLIDAY_TIMEOUT)
         if response.status_code == 200:
             logging.info("Holiday detected via web service")
             return True
@@ -830,7 +829,7 @@ def find_next_catcher(
                 logging.info(f"User {result['mail']} was already selected for today")
                 return result["mail"], False
 
-            # Get current weekday (0-6, where 0 is Monday in SQLite's strftime)
+            # Get current weekday (strftime %w: 0=Sunday, 1=Monday, ..., 6=Saturday)
             weekday = datetime.datetime.now().strftime("%w")
 
             # Get all users who are available on this weekday (filtered by tenant)
@@ -1029,10 +1028,10 @@ def main() -> None:
                 tenant = get_tenant_by_name(conn, args.tenant)
                 if not tenant:
                     logging.error(f"Tenant '{args.tenant}' not found")
-                    exit(1)
+                    sys.exit(1)
                 if not tenant["active"]:
                     logging.error(f"Tenant '{args.tenant}' is inactive")
-                    exit(1)
+                    sys.exit(1)
 
                 tenants_to_process = [tenant]
             else:
