@@ -9,4 +9,5 @@ __pycache__
 sent_emails/
 *.log
 
-
+saved-context/
+.coverage
