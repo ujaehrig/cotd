@@ -31,7 +31,7 @@ def db(tmp_path):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
-    schema_path = Path(__file__).parent / "schema_tenants.sql"
+    schema_path = Path(__file__).parent.parent / "schema_tenants.sql"
     conn.executescript(schema_path.read_text())
 
     conn.executescript("""

@@ -23,7 +23,7 @@ def temp_db(tmp_path):
 @pytest.fixture
 def schema_sql():
     """Load the tenant schema SQL."""
-    schema_path = Path(__file__).parent / "schema_tenants.sql"
+    schema_path = Path(__file__).parent.parent / "schema_tenants.sql"
     return schema_path.read_text()
 
 

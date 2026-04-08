@@ -15,7 +15,7 @@ def db_path(tmp_path):
     path = tmp_path / "test.db"
     conn = sqlite3.connect(path)
 
-    schema_path = Path(__file__).parent / "schema_tenants.sql"
+    schema_path = Path(__file__).parent.parent / "schema_tenants.sql"
     conn.executescript(schema_path.read_text())
 
     conn.executescript("""
