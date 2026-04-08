@@ -177,7 +177,7 @@ def list_vacations(user_identifier=None, show_all=False):
         sys.exit(1)
 
 
-def add_vacation(user_identifier, start_date, end_date=None):
+def add_vacation(user_identifier, start_date, end_date=None, force=False):
     """
     Add a new vacation period for a user.
 
@@ -208,6 +208,20 @@ def add_vacation(user_identifier, start_date, end_date=None):
     if start > end:
         logging.error("End date cannot be before start date.")
         sys.exit(1)
+
+    # Check for duplicates and overlaps
+    if not force:
+        is_dup, dup_msg = check_duplicate_vacation(user_id, start, end)
+        if is_dup:
+            logging.warning(dup_msg)
+            logging.info("Use --force to add anyway.")
+            sys.exit(1)
+
+        has_overlap, overlap_msg = check_vacation_overlap(user_id, start, end)
+        if has_overlap:
+            logging.warning(overlap_msg)
+            logging.info("Use --force to add anyway.")
+            sys.exit(1)
 
     try:
         with get_db_connection() as conn:
@@ -393,6 +407,11 @@ def main():
     add_vacation_parser.add_argument(
         "end_date", help="End date (YYYY-MM-DD)", nargs="?", default=None
     )
+    add_vacation_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force add even if overlapping or duplicate vacation exists",
+    )
 
     # Delete vacation command
     delete_vacation_parser = subparsers.add_parser(
@@ -409,7 +428,7 @@ def main():
     elif args.command == "list-vacations":
         list_vacations(args.user, args.all)
     elif args.command == "add":
-        add_vacation(args.user, args.start_date, args.end_date)
+        add_vacation(args.user, args.start_date, args.end_date, args.force)
     elif args.command == "delete":
         delete_vacation(args.vacation_id)
     else:

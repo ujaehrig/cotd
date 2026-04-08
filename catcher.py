@@ -25,6 +25,7 @@ from typing import Optional, Dict, Tuple, List
 from pathlib import Path
 from dotenv import load_dotenv
 from db import DATABASE_PATH, get_db_connection
+from cleanup import cleanup_old_selection_history
 
 # Import vacation sync
 try:
@@ -421,45 +422,6 @@ def trigger_slack(
             return False
 
     return False
-
-
-def cleanup_old_selection_history(
-    conn: sqlite3.Connection, retention_days: int = CLEANUP_RETENTION_DAYS
-) -> None:
-    """
-    Clean up old selection history records to prevent unlimited growth.
-
-    Args:
-        conn: Database connection
-        retention_days: Number of days to retain (default: 90 days)
-    """
-    try:
-        cutoff_date = (
-            datetime.date.today() - datetime.timedelta(days=retention_days)
-        ).isoformat()
-        cursor = conn.cursor()
-
-        # Count records that would be deleted
-        cursor.execute(
-            "SELECT COUNT(*) FROM selection_history WHERE selected_date < ?",
-            (cutoff_date,),
-        )
-        old_count = cursor.fetchone()[0]
-
-        if old_count > 0:
-            # Delete old records
-            cursor.execute(
-                "DELETE FROM selection_history WHERE selected_date < ?", (cutoff_date,)
-            )
-
-            deleted_count = cursor.rowcount
-            if deleted_count > 0:
-                logging.info(
-                    f"Cleaned up {deleted_count} old selection history records (older than {retention_days} days)"
-                )
-
-    except sqlite3.Error as e:
-        logging.warning(f"Failed to clean up old selection history: {e}")
 
 
 def is_user_on_vacation(conn: sqlite3.Connection, user_id: int, date: str) -> bool:
@@ -961,7 +923,7 @@ def find_next_catcher(
 
                 # Occasionally clean up old selection history (10% chance)
                 if not dry_run and random.random() < CLEANUP_PROBABILITY:
-                    cleanup_old_selection_history(conn)
+                    cleanup_old_selection_history(conn, CLEANUP_RETENTION_DAYS)
 
                 selected_weight = next(
                     wu["weight"]

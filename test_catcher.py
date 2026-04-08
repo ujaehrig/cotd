@@ -12,7 +12,6 @@ from catcher import (
     get_active_tenants,
     is_user_on_vacation,
     get_recent_selection_count,
-    cleanup_old_selection_history,
     calculate_user_weight,
     add_tie_breaking_logic,
     weighted_random_selection_improved,
@@ -22,6 +21,7 @@ from catcher import (
     process_tenant,
     find_next_catcher,
 )
+from cleanup import cleanup_old_selection_history
 
 
 @pytest.fixture

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-sqlite3 user.db < setup.sql
+sqlite3 user.db < schema.sql
 
 test -f setup-user.sql && sqlite3 user.db < setup-user.sql
 

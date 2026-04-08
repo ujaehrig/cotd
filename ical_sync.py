@@ -13,6 +13,7 @@ iCal parser module for fetching and parsing ICS calendar feeds.
 """
 
 import os
+import logging
 import requests
 from datetime import datetime, date
 from typing import List, Dict, Optional
@@ -21,6 +22,8 @@ from icalendar import Calendar
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class ICalParser:
@@ -54,7 +57,7 @@ class ICalParser:
         except Exception as e:
             parts = urlsplit(url)
             safe_url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
-            print(f"Error fetching calendar from {safe_url}: {e}")
+            logger.error(f"Error fetching calendar from {safe_url}: {e}")
             return None
 
     def extract_events(self, calendar: Calendar, start_date: date = None) -> List[Dict]:
@@ -122,7 +125,7 @@ class ICalParser:
                 )
 
             except Exception as e:
-                print(f"Error parsing event: {e}")
+                logger.warning(f"Error parsing event: {e}")
                 continue
 
         return events

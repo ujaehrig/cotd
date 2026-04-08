@@ -4,7 +4,7 @@ import sqlite3
 import pytest
 from unittest.mock import patch
 
-from manage_vacations import check_vacation_overlap, check_duplicate_vacation
+from manage_vacations import check_vacation_overlap, check_duplicate_vacation, add_vacation
 
 
 @pytest.fixture
@@ -99,3 +99,50 @@ class TestCheckVacationOverlap:
     def test_no_overlap_after(self):
         has, _ = check_vacation_overlap(1, "2025-12-17", "2025-12-20")
         assert has is False
+
+
+class TestAddVacationValidation:
+    """Tests that add_vacation integrates overlap/duplicate checks."""
+
+    def test_duplicate_blocked_without_force(self, db_with_vacation):
+        """Exact duplicate is rejected without --force."""
+        with pytest.raises(SystemExit):
+            add_vacation("1", "2025-12-10", "2025-12-15", force=False)
+
+    def test_duplicate_allowed_with_force(self, db_with_vacation):
+        """Exact duplicate is allowed with --force."""
+        add_vacation("1", "2025-12-10", "2025-12-15", force=True)
+        conn = sqlite3.connect(db_with_vacation)
+        conn.row_factory = sqlite3.Row
+        count = conn.execute(
+            "SELECT COUNT(*) FROM vacation WHERE user_id = 1"
+        ).fetchone()[0]
+        conn.close()
+        assert count == 2
+
+    def test_overlap_blocked_without_force(self, db_with_vacation):
+        """Overlapping vacation is rejected without --force."""
+        with pytest.raises(SystemExit):
+            add_vacation("1", "2025-12-12", "2025-12-18", force=False)
+
+    def test_overlap_allowed_with_force(self, db_with_vacation):
+        """Overlapping vacation is allowed with --force."""
+        add_vacation("1", "2025-12-12", "2025-12-18", force=True)
+        conn = sqlite3.connect(db_with_vacation)
+        conn.row_factory = sqlite3.Row
+        count = conn.execute(
+            "SELECT COUNT(*) FROM vacation WHERE user_id = 1"
+        ).fetchone()[0]
+        conn.close()
+        assert count == 2
+
+    def test_no_conflict_passes_without_force(self, db_with_vacation):
+        """Non-conflicting vacation is added without --force."""
+        add_vacation("1", "2025-12-20", "2025-12-25", force=False)
+        conn = sqlite3.connect(db_with_vacation)
+        conn.row_factory = sqlite3.Row
+        count = conn.execute(
+            "SELECT COUNT(*) FROM vacation WHERE user_id = 1"
+        ).fetchone()[0]
+        conn.close()
+        assert count == 2

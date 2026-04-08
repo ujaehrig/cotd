@@ -35,7 +35,8 @@ def db_path(tmp_path):
             source VARCHAR(20) DEFAULT 'manual',
             last_synced TIMESTAMP,
             ical_event_uid VARCHAR(200),
-            FOREIGN KEY (user_id) REFERENCES user(id)
+            FOREIGN KEY (user_id) REFERENCES user(id),
+            UNIQUE (user_id, ical_event_uid)
         );
         CREATE TABLE IF NOT EXISTS vacation_sync_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,6 +164,86 @@ class TestSyncTenantVacations:
         success, msg = s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
         assert success is False
         assert "failed" in msg.lower()
+
+    def test_upsert_updates_existing_event(self, db_path):
+        """Running sync twice with same UID updates rather than duplicates."""
+        s = self._make_sync(db_path)
+        from icalendar import Calendar
+
+        s.parser.fetch_calendar.return_value = Calendar()
+        s.parser.extract_events.return_value = [
+            {"title": "Alice Wonder", "start_date": date(2026, 7, 1), "end_date": date(2026, 7, 5), "uid": "ev1"},
+        ]
+        s.matcher.match_user.return_value = 1
+
+        s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
+
+        # Sync again with updated dates
+        s.parser.extract_events.return_value = [
+            {"title": "Alice Wonder", "start_date": date(2026, 7, 2), "end_date": date(2026, 7, 6), "uid": "ev1"},
+        ]
+        s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
+
+        conn = sqlite3.connect(db_path)
+        rows = conn.execute(
+            "SELECT start_date, end_date FROM vacation WHERE source = 'ical'"
+        ).fetchall()
+        conn.close()
+        assert len(rows) == 1
+        assert rows[0][0] == "2026-07-02"
+        assert rows[0][1] == "2026-07-06"
+
+    def test_removed_event_is_deleted(self, db_path):
+        """Events removed from calendar are deleted from DB."""
+        s = self._make_sync(db_path)
+        from icalendar import Calendar
+
+        s.parser.fetch_calendar.return_value = Calendar()
+        s.parser.extract_events.return_value = [
+            {"title": "Alice", "start_date": date(2026, 7, 1), "end_date": date(2026, 7, 5), "uid": "ev1"},
+            {"title": "Alice", "start_date": date(2026, 8, 1), "end_date": date(2026, 8, 5), "uid": "ev2"},
+        ]
+        s.matcher.match_user.return_value = 1
+
+        s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
+
+        # Second sync with ev2 removed
+        s.parser.extract_events.return_value = [
+            {"title": "Alice", "start_date": date(2026, 7, 1), "end_date": date(2026, 7, 5), "uid": "ev1"},
+        ]
+        s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
+
+        conn = sqlite3.connect(db_path)
+        count = conn.execute("SELECT COUNT(*) FROM vacation WHERE source = 'ical'").fetchone()[0]
+        conn.close()
+        assert count == 1
+
+    def test_manual_vacations_untouched(self, db_path):
+        """Manual vacations are not affected by iCal sync."""
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO vacation (user_id, start_date, end_date, source) VALUES (1, '2026-09-01', '2026-09-05', 'manual')"
+        )
+        conn.commit()
+        conn.close()
+
+        s = self._make_sync(db_path)
+        from icalendar import Calendar
+
+        s.parser.fetch_calendar.return_value = Calendar()
+        s.parser.extract_events.return_value = [
+            {"title": "Alice", "start_date": date(2026, 7, 1), "end_date": date(2026, 7, 5), "uid": "ev1"},
+        ]
+        s.matcher.match_user.return_value = 1
+
+        s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
+
+        conn = sqlite3.connect(db_path)
+        manual = conn.execute("SELECT COUNT(*) FROM vacation WHERE source = 'manual'").fetchone()[0]
+        ical = conn.execute("SELECT COUNT(*) FROM vacation WHERE source = 'ical'").fetchone()[0]
+        conn.close()
+        assert manual == 1
+        assert ical == 1
 
 
 class TestUseCachedData:

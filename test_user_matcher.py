@@ -86,3 +86,13 @@ class TestMatchUser:
         monkeypatch.delenv("FUZZY_MATCH_THRESHOLD", raising=False)
         m = UserMatcher()
         assert m.threshold == 80
+
+    def test_short_name_no_false_positive(self, matcher):
+        """Short names like 'Jan' should not falsely match 'Jane'."""
+        users = [(1, "jane@example.com", None)]
+        assert matcher.match_user("Jan - Urlaub", users) is None
+
+    def test_reordered_name_matches(self, matcher):
+        """token_sort_ratio handles name reordering."""
+        users = [(1, "john.doe@example.com", "John Doe")]
+        assert matcher.match_user("Vacation Doe John", users) == 1
