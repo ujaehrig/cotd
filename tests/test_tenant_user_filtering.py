@@ -22,7 +22,7 @@ def test_db_with_tenant_users(tmp_path):
     conn = sqlite3.connect(db_path)
 
     # Create tenants table
-    schema_path = Path(__file__).parent / "schema_tenants.sql"
+    schema_path = Path(__file__).parent.parent / "schema_tenants.sql"
     conn.executescript(schema_path.read_text())
 
     # Add test tenants
