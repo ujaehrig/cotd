@@ -13,7 +13,7 @@ User matching module for fuzzy matching calendar event names to users.
 import os
 import re
 from typing import Optional, List, Tuple
-from rapidfuzz import fuzz, process
+from rapidfuzz import fuzz
 
 
 class UserMatcher:
@@ -87,7 +87,7 @@ class UserMatcher:
             # Also add first and last name separately
             parts = email_name.split()
             for part in parts:
-                if len(part) > 2:  # Skip very short parts
+                if len(part) > 3:  # Skip very short parts
                     candidates.append((user_id, part))
 
             # Add display name if available
@@ -96,17 +96,22 @@ class UserMatcher:
                 # Add display name parts
                 display_parts = display_name.split()
                 for part in display_parts:
-                    if len(part) > 2:
+                    if len(part) > 3:
                         candidates.append((user_id, part))
 
         # Try to match each extracted name
         for name in names:
+            if len(name) < 4:
+                continue
+
             # Find best match
             best_match = None
             best_score = 0
 
             for user_id, candidate in candidates:
-                score = fuzz.ratio(name.lower(), candidate.lower())
+                if len(candidate) < 4:
+                    continue
+                score = fuzz.token_sort_ratio(name.lower(), candidate.lower())
                 if score > best_score:
                     best_score = score
                     best_match = user_id

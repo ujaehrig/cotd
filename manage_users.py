@@ -11,21 +11,25 @@ User management script for Catcher of the Day.
 Allows setting display names/nicknames for users.
 """
 
-import sqlite3
 import argparse
+import re
 import sys
-import os
-from pathlib import Path
 from dotenv import load_dotenv
+from db import DATABASE_PATH, get_db_connection
 
 load_dotenv()
 
 
 def get_db_path(args):
-    """Get database path from args or environment."""
-    if args.db:
-        return args.db
-    return os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
+    """Get database path from args or default."""
+    return args.db if args.db else DATABASE_PATH
+
+
+def validate_weekdays(value):
+    """Validate weekdays is a comma-separated list of digits 0-6."""
+    if not re.match(r'^[0-6](,[0-6])*$', value):
+        print("Error: weekdays must be comma-separated digits 0-6 (0=Sun, 1=Mon, ..., 6=Sat)", file=sys.stderr)
+        sys.exit(1)
 
 
 def get_user_by_id_or_email(conn, identifier):
@@ -39,7 +43,7 @@ def get_user_by_id_or_email(conn, identifier):
 
 def cmd_list(args):
     """List all users."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     query = """
         SELECT u.id, u.mail, u.display_name, t.name as tenant_name
@@ -71,7 +75,7 @@ def cmd_list(args):
 
 def cmd_set_display_name(args):
     """Set display name for a user."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     user = get_user_by_id_or_email(conn, args.identifier)
     if not user:
@@ -99,7 +103,7 @@ def cmd_set_display_name(args):
 
 def cmd_show(args):
     """Show details for a specific user."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     user = get_user_by_id_or_email(conn, args.identifier)
     if not user:
@@ -124,7 +128,7 @@ def cmd_show(args):
 
 def cmd_add(args):
     """Add a new user."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     # Check if user already exists
     cursor = conn.execute("SELECT id FROM user WHERE mail = ?", (args.email,))
@@ -147,6 +151,7 @@ def cmd_add(args):
 
     # Add user
     weekdays = args.weekdays if args.weekdays else "1,2,3,4,5"
+    validate_weekdays(weekdays)
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id, display_name) VALUES (?, ?, ?, ?)",
         (args.email, weekdays, tenant_id, args.display_name)
@@ -162,7 +167,7 @@ def cmd_add(args):
 
 def cmd_update(args):
     """Update user details."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     user = get_user_by_id_or_email(conn, args.identifier)
     if not user:
@@ -192,6 +197,7 @@ def cmd_update(args):
         params.append(tenant_row[0])
 
     if args.weekdays:
+        validate_weekdays(args.weekdays)
         updates.append("weekdays = ?")
         params.append(args.weekdays)
 
@@ -210,7 +216,7 @@ def cmd_update(args):
 
 def cmd_delete(args):
     """Delete a user."""
-    conn = sqlite3.connect(get_db_path(args))
+    conn = get_db_connection(get_db_path(args))
 
     user = get_user_by_id_or_email(conn, args.identifier)
     if not user:

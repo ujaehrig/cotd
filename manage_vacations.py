@@ -10,10 +10,9 @@ import sqlite3
 import argparse
 import logging
 import sys
-import os
-from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
+from db import get_db_connection
 
 # Load environment variables
 load_dotenv()
@@ -22,25 +21,6 @@ load_dotenv()
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
-
-# Database path
-DATABASE_PATH = Path(__file__).parent / os.getenv("DB_PATH", "user.db")
-
-
-def get_db_connection() -> sqlite3.Connection:
-    """Create and return a database connection."""
-    if not DATABASE_PATH.exists():
-        logging.error(f"Database file not found: {DATABASE_PATH}")
-        logging.error("Run setup.sh or create the database first")
-        sys.exit(1)
-
-    try:
-        conn = sqlite3.connect(DATABASE_PATH)
-        conn.row_factory = sqlite3.Row
-        return conn
-    except sqlite3.Error as e:
-        logging.error(f"Database connection error: {e}")
-        sys.exit(1)
 
 
 def validate_date(date_str: str) -> str:
@@ -197,7 +177,7 @@ def list_vacations(user_identifier=None, show_all=False):
         sys.exit(1)
 
 
-def add_vacation(user_identifier, start_date, end_date=None):
+def add_vacation(user_identifier, start_date, end_date=None, force=False):
     """
     Add a new vacation period for a user.
 
@@ -228,6 +208,20 @@ def add_vacation(user_identifier, start_date, end_date=None):
     if start > end:
         logging.error("End date cannot be before start date.")
         sys.exit(1)
+
+    # Check for duplicates and overlaps
+    if not force:
+        is_dup, dup_msg = check_duplicate_vacation(user_id, start, end)
+        if is_dup:
+            logging.warning(dup_msg)
+            logging.info("Use --force to add anyway.")
+            sys.exit(1)
+
+        has_overlap, overlap_msg = check_vacation_overlap(user_id, start, end)
+        if has_overlap:
+            logging.warning(overlap_msg)
+            logging.info("Use --force to add anyway.")
+            sys.exit(1)
 
     try:
         with get_db_connection() as conn:
@@ -302,6 +296,92 @@ def delete_vacation(vacation_id):
         sys.exit(1)
 
 
+def check_vacation_overlap(
+    user_id: int, start_date: str, end_date: str
+) -> tuple[bool, str]:
+    """
+    Check if a vacation period overlaps with existing vacations for a user.
+
+    Args:
+        user_id: ID of the user
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+
+    Returns:
+        Tuple of (has_overlap, error_message)
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT start_date, end_date
+                FROM vacation
+                WHERE user_id = ?
+                AND (
+                    (start_date <= ? AND end_date >= ?) OR
+                    (start_date <= ? AND end_date >= ?) OR
+                    (start_date >= ? AND end_date <= ?)
+                )
+            """,
+                (user_id, end_date, start_date, end_date, start_date, start_date, end_date),
+            )
+            overlapping = cursor.fetchall()
+
+            if overlapping:
+                dates = []
+                for v in overlapping:
+                    if v["start_date"] == v["end_date"]:
+                        dates.append(v["start_date"])
+                    else:
+                        dates.append(f"{v['start_date']} to {v['end_date']}")
+                noun = "vacation" if len(dates) == 1 else "vacations"
+                return True, f"This vacation overlaps with your existing {noun}: {', '.join(dates)}"
+
+            return False, ""
+    except Exception as e:
+        logging.error(f"Error checking vacation overlap for user {user_id}: {e}")
+        return True, "Error checking for vacation conflicts. Please try again."
+
+
+def check_duplicate_vacation(
+    user_id: int, start_date: str, end_date: str
+) -> tuple[bool, str]:
+    """
+    Check if a vacation period is an exact duplicate of an existing vacation.
+
+    Args:
+        user_id: ID of the user
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+
+    Returns:
+        Tuple of (is_duplicate, error_message)
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT COUNT(*) as count
+                FROM vacation
+                WHERE user_id = ? AND start_date = ? AND end_date = ?
+            """,
+                (user_id, start_date, end_date),
+            )
+            result = cursor.fetchone()
+
+            if result["count"] > 0:
+                if start_date == end_date:
+                    return True, f"You already have a vacation on {start_date}"
+                return True, f"You already have a vacation from {start_date} to {end_date}"
+
+            return False, ""
+    except Exception as e:
+        logging.error(f"Error checking duplicate vacation for user {user_id}: {e}")
+        return True, "Error checking for duplicate vacations. Please try again."
+
+
 def main():
     parser = argparse.ArgumentParser(description="Manage vacation periods for users")
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
@@ -327,6 +407,11 @@ def main():
     add_vacation_parser.add_argument(
         "end_date", help="End date (YYYY-MM-DD)", nargs="?", default=None
     )
+    add_vacation_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force add even if overlapping or duplicate vacation exists",
+    )
 
     # Delete vacation command
     delete_vacation_parser = subparsers.add_parser(
@@ -343,7 +428,7 @@ def main():
     elif args.command == "list-vacations":
         list_vacations(args.user, args.all)
     elif args.command == "add":
-        add_vacation(args.user, args.start_date, args.end_date)
+        add_vacation(args.user, args.start_date, args.end_date, args.force)
     elif args.command == "delete":
         delete_vacation(args.vacation_id)
     else:

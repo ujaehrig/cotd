@@ -53,19 +53,19 @@ def test_db_with_tenants(tmp_path):
     # Add users to tenants
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("alpha1@example.com", "0,1,2,3,4", 1),
+        ("alpha1@example.com", "1,2,3,4,5", 1),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("alpha2@example.com", "0,1,2,3,4", 1),
+        ("alpha2@example.com", "1,2,3,4,5", 1),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("beta1@example.com", "0,1,2,3,4", 2),
+        ("beta1@example.com", "1,2,3,4,5", 2),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("beta2@example.com", "0,1,2,3,4", 2),
+        ("beta2@example.com", "1,2,3,4,5", 2),
     )
     conn.commit()
     conn.close()
@@ -75,7 +75,7 @@ def test_db_with_tenants(tmp_path):
 
 def test_get_tenant_by_name(test_db_with_tenants):
     """Test retrieving tenant by name."""
-    from catcher_weighted import get_tenant_by_name
+    from catcher import get_tenant_by_name
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "Team Alpha")
@@ -89,7 +89,7 @@ def test_get_tenant_by_name(test_db_with_tenants):
 
 def test_get_tenant_by_name_not_found(test_db_with_tenants):
     """Test retrieving non-existent tenant returns None."""
-    from catcher_weighted import get_tenant_by_name
+    from catcher import get_tenant_by_name
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "NonExistent")
@@ -100,7 +100,7 @@ def test_get_tenant_by_name_not_found(test_db_with_tenants):
 
 def test_get_active_tenants(test_db_with_tenants):
     """Test retrieving all active tenants."""
-    from catcher_weighted import get_active_tenants
+    from catcher import get_active_tenants
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenants = get_active_tenants(conn)
@@ -113,7 +113,7 @@ def test_get_active_tenants(test_db_with_tenants):
 
 def test_get_active_tenants_excludes_inactive(test_db_with_tenants):
     """Test that inactive tenants are excluded."""
-    from catcher_weighted import get_active_tenants
+    from catcher import get_active_tenants
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenants = get_active_tenants(conn)
@@ -125,7 +125,7 @@ def test_get_active_tenants_excludes_inactive(test_db_with_tenants):
 
 def test_process_tenant_returns_success(test_db_with_tenants):
     """Test processing a single tenant returns success."""
-    from catcher_weighted import process_tenant, get_tenant_by_name
+    from catcher import process_tenant, get_tenant_by_name
     from unittest.mock import patch
 
     conn = sqlite3.connect(test_db_with_tenants)
@@ -133,15 +133,15 @@ def test_process_tenant_returns_success(test_db_with_tenants):
 
     # Mock external dependencies
     with (
-        patch("catcher_weighted.is_weekend", return_value=False),
-        patch("catcher_weighted.is_holiday", return_value=False),
+        patch("catcher.is_weekend", return_value=False),
+        patch("catcher.is_holiday", return_value=False),
         patch(
-            "catcher_weighted.find_next_catcher_weighted",
+            "catcher.find_next_catcher",
             return_value=("alpha1@example.com", True),
         ),
-        patch("catcher_weighted.trigger_slack", return_value=True),
+        patch("catcher.trigger_slack", return_value=True),
     ):
-        from catcher_weighted import process_tenant
+        from catcher import process_tenant
 
         success = process_tenant(
             conn, tenant, dry_run=True, debug_weights=False, force_notify=False
@@ -153,14 +153,14 @@ def test_process_tenant_returns_success(test_db_with_tenants):
 
 def test_process_tenant_handles_weekend(test_db_with_tenants):
     """Test processing tenant on weekend returns success without selection."""
-    from catcher_weighted import process_tenant, get_tenant_by_name
+    from catcher import process_tenant, get_tenant_by_name
     from unittest.mock import patch
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "Team Alpha")
 
-    with patch("catcher_weighted.is_weekend", return_value=True):
-        from catcher_weighted import process_tenant
+    with patch("catcher.is_weekend", return_value=True):
+        from catcher import process_tenant
 
         success = process_tenant(
             conn, tenant, dry_run=True, debug_weights=False, force_notify=False
@@ -172,14 +172,14 @@ def test_process_tenant_handles_weekend(test_db_with_tenants):
 
 def test_process_tenant_handles_errors(test_db_with_tenants):
     """Test processing tenant handles errors gracefully."""
-    from catcher_weighted import process_tenant, get_tenant_by_name
+    from catcher import process_tenant, get_tenant_by_name
     from unittest.mock import patch
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "Team Alpha")
 
-    with patch("catcher_weighted.is_weekend", side_effect=Exception("Test error")):
-        from catcher_weighted import process_tenant
+    with patch("catcher.is_weekend", side_effect=Exception("Test error")):
+        from catcher import process_tenant
 
         success = process_tenant(
             conn, tenant, dry_run=True, debug_weights=False, force_notify=False

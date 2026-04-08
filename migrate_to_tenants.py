@@ -30,7 +30,8 @@ def migrate_database(db_path: str = None) -> None:
         db_path: Path to database file. If None, uses DB_PATH env var or default.
     """
     if db_path is None:
-        db_path = os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
+        from db import DATABASE_PATH
+        db_path = DATABASE_PATH
 
     logger.info(f"Starting migration for database: {db_path}")
 

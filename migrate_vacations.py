@@ -2,15 +2,12 @@
 
 import sqlite3
 import logging
-from pathlib import Path
+from db import DATABASE_PATH
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
-
-# Database path
-DATABASE_PATH = Path(__file__).parent / "user.db"
 
 
 def migrate_vacations():

@@ -226,13 +226,13 @@ LOOKBACK_DAYS = 60                   # Days to consider for frequency penalty
 ### Basic Usage
 ```bash
 # Run with current algorithm
-python catcher_weighted.py
+python catcher.py
 
 # Dry run to see who would be selected
-python catcher_weighted.py --dry-run
+python catcher.py --dry-run
 
 # Show detailed weight calculations
-python catcher_weighted.py --dry-run --debug-weights
+python catcher.py --dry-run --debug-weights
 ```
 
 ### Migration
@@ -293,7 +293,7 @@ Potential improvements to consider:
 ### Debug Commands
 ```bash
 # See weight calculations
-python catcher_weighted.py --dry-run --debug-weights
+python catcher.py --dry-run --debug-weights
 
 # Check selection history
 sqlite3 user.db "SELECT u.mail, sh.selected_date FROM selection_history sh JOIN user u ON sh.user_id = u.id ORDER BY sh.selected_date DESC LIMIT 10;"

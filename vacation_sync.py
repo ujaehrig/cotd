@@ -13,11 +13,9 @@
 Vacation sync module that orchestrates iCal fetching, user matching, and database updates.
 """
 
-import os
 import sqlite3
 import logging
-from datetime import datetime, date
-from pathlib import Path
+from datetime import datetime
 from typing import Optional, List, Tuple
 from dotenv import load_dotenv
 
@@ -40,7 +38,8 @@ class VacationSync:
             db_path: Path to database file. If None, uses DB_PATH env var or default.
         """
         if db_path is None:
-            db_path = os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
+            from db import DATABASE_PATH
+            db_path = DATABASE_PATH
         self.db_path = db_path
         self.parser = ICalParser()
         self.matcher = UserMatcher()
@@ -110,35 +109,55 @@ class VacationSync:
                 conn.commit()
                 return True, msg
 
-            # Delete old iCal-sourced vacations for this tenant
-            cursor.execute("""
-                DELETE FROM vacation 
-                WHERE user_id IN (SELECT id FROM user WHERE tenant_id = ?)
-                AND source = 'ical'
-            """, (tenant_id,))
-            deleted_count = cursor.rowcount
-            logger.info(f"Deleted {deleted_count} old iCal vacation entries")
-
-            # Match events to users and insert
+            # Upsert matched events and track active UIDs
             matched_count = 0
+            active_uids = set()
             sync_time = datetime.now()
-            
+
             for event in events:
                 user_id = self.matcher.match_user(event['title'], users)
                 if user_id:
+                    uid = event['uid']
+                    active_uids.add(uid)
                     cursor.execute("""
-                        INSERT INTO vacation 
+                        INSERT INTO vacation
                         (user_id, start_date, end_date, source, last_synced, ical_event_uid)
                         VALUES (?, ?, ?, 'ical', ?, ?)
+                        ON CONFLICT(user_id, ical_event_uid) DO UPDATE SET
+                            start_date = excluded.start_date,
+                            end_date = excluded.end_date,
+                            last_synced = excluded.last_synced
                     """, (
                         user_id,
                         event['start_date'].isoformat(),
                         event['end_date'].isoformat(),
                         sync_time.isoformat(),
-                        event['uid']
+                        uid,
                     ))
                     matched_count += 1
                     logger.debug(f"Matched '{event['title']}' to user {user_id}")
+
+            # Remove stale iCal vacations no longer in the calendar
+            tenant_user_ids = [u[0] for u in users]
+            if tenant_user_ids:
+                placeholders = ','.join('?' * len(tenant_user_ids))
+                if active_uids:
+                    uid_placeholders = ','.join('?' * len(active_uids))
+                    cursor.execute(f"""
+                        DELETE FROM vacation
+                        WHERE user_id IN ({placeholders})
+                        AND source = 'ical'
+                        AND ical_event_uid NOT IN ({uid_placeholders})
+                    """, tenant_user_ids + list(active_uids))
+                else:
+                    cursor.execute(f"""
+                        DELETE FROM vacation
+                        WHERE user_id IN ({placeholders})
+                        AND source = 'ical'
+                    """, tenant_user_ids)
+                stale_count = cursor.rowcount
+                if stale_count:
+                    logger.info(f"Removed {stale_count} stale iCal vacation entries")
 
             # Log sync
             self._log_sync(conn, tenant_id, "success", len(events), matched_count, None)

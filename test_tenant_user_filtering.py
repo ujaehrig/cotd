@@ -66,22 +66,22 @@ def test_db_with_tenant_users(tmp_path):
         )
     """)
 
-    # Add users to tenants
+    # Add users to tenants (available all days so tests don't depend on current weekday)
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("alpha1@example.com", "0,1,2,3,4", 1),
+        ("alpha1@example.com", "0,1,2,3,4,5,6", 1),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("alpha2@example.com", "0,1,2,3,4", 1),
+        ("alpha2@example.com", "0,1,2,3,4,5,6", 1),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("beta1@example.com", "0,1,2,3,4", 2),
+        ("beta1@example.com", "0,1,2,3,4,5,6", 2),
     )
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
-        ("beta2@example.com", "0,1,2,3,4", 2),
+        ("beta2@example.com", "0,1,2,3,4,5,6", 2),
     )
     conn.commit()
     conn.close()
@@ -90,19 +90,19 @@ def test_db_with_tenant_users(tmp_path):
 
 
 def test_find_next_catcher_filters_by_tenant(test_db_with_tenant_users):
-    """Test that find_next_catcher_weighted filters users by tenant_id."""
-    from catcher_weighted import find_next_catcher_weighted
+    """Test that find_next_catcher filters users by tenant_id."""
+    from catcher import find_next_catcher
     from unittest.mock import patch
 
     conn = sqlite3.connect(test_db_with_tenant_users)
 
     # Mock weekend and holiday checks
     with (
-        patch("catcher_weighted.is_weekend", return_value=False),
-        patch("catcher_weighted.is_holiday", return_value=False),
+        patch("catcher.is_weekend", return_value=False),
+        patch("catcher.is_holiday", return_value=False),
     ):
         # Should only return users from tenant 1
-        mail, is_new = find_next_catcher_weighted(conn, tenant_id=1, dry_run=True)
+        mail, is_new = find_next_catcher(conn, tenant_id=1, dry_run=True)
 
         assert mail is not None
         assert mail in ["alpha1@example.com", "alpha2@example.com"]
@@ -113,17 +113,17 @@ def test_find_next_catcher_filters_by_tenant(test_db_with_tenant_users):
 
 def test_find_next_catcher_excludes_other_tenants(test_db_with_tenant_users):
     """Test that users from other tenants are not included."""
-    from catcher_weighted import find_next_catcher_weighted
+    from catcher import find_next_catcher
     from unittest.mock import patch
 
     conn = sqlite3.connect(test_db_with_tenant_users)
 
     with (
-        patch("catcher_weighted.is_weekend", return_value=False),
-        patch("catcher_weighted.is_holiday", return_value=False),
+        patch("catcher.is_weekend", return_value=False),
+        patch("catcher.is_holiday", return_value=False),
     ):
         # Process tenant 2
-        mail, is_new = find_next_catcher_weighted(conn, tenant_id=2, dry_run=True)
+        mail, is_new = find_next_catcher(conn, tenant_id=2, dry_run=True)
 
         assert mail is not None
         assert mail in ["beta1@example.com", "beta2@example.com"]
@@ -134,7 +134,7 @@ def test_find_next_catcher_excludes_other_tenants(test_db_with_tenant_users):
 
 def test_find_next_catcher_returns_none_when_no_users(test_db_with_tenant_users):
     """Test that None is returned when tenant has no users."""
-    from catcher_weighted import find_next_catcher_weighted
+    from catcher import find_next_catcher
     from unittest.mock import patch
 
     conn = sqlite3.connect(test_db_with_tenant_users)
@@ -147,10 +147,10 @@ def test_find_next_catcher_returns_none_when_no_users(test_db_with_tenant_users)
     conn.commit()
 
     with (
-        patch("catcher_weighted.is_weekend", return_value=False),
-        patch("catcher_weighted.is_holiday", return_value=False),
+        patch("catcher.is_weekend", return_value=False),
+        patch("catcher.is_holiday", return_value=False),
     ):
-        mail, is_new = find_next_catcher_weighted(conn, tenant_id=3, dry_run=True)
+        mail, is_new = find_next_catcher(conn, tenant_id=3, dry_run=True)
 
         assert mail is None
 
@@ -159,7 +159,7 @@ def test_find_next_catcher_returns_none_when_no_users(test_db_with_tenant_users)
 
 def test_vacation_filtering_per_tenant(test_db_with_tenant_users):
     """Test that vacation filtering works correctly per tenant."""
-    from catcher_weighted import find_next_catcher_weighted
+    from catcher import find_next_catcher
     from unittest.mock import patch
 
     conn = sqlite3.connect(test_db_with_tenant_users)
@@ -173,11 +173,11 @@ def test_vacation_filtering_per_tenant(test_db_with_tenant_users):
     conn.commit()
 
     with (
-        patch("catcher_weighted.is_weekend", return_value=False),
-        patch("catcher_weighted.is_holiday", return_value=False),
+        patch("catcher.is_weekend", return_value=False),
+        patch("catcher.is_holiday", return_value=False),
     ):
         # Should only return alpha2 (alpha1 is on vacation)
-        mail, is_new = find_next_catcher_weighted(conn, tenant_id=1, dry_run=True)
+        mail, is_new = find_next_catcher(conn, tenant_id=1, dry_run=True)
 
         assert mail == "alpha2@example.com"
 
@@ -186,21 +186,23 @@ def test_vacation_filtering_per_tenant(test_db_with_tenant_users):
 
 def test_weekday_filtering_per_tenant(test_db_with_tenant_users):
     """Test that weekday filtering works correctly per tenant."""
-    from catcher_weighted import find_next_catcher_weighted
+    from catcher import find_next_catcher
     from unittest.mock import patch
 
     conn = sqlite3.connect(test_db_with_tenant_users)
 
-    # Update alpha1 to only work on weekends (5,6)
-    conn.execute("UPDATE user SET weekdays = ? WHERE id = ?", ("5,6", 1))
+    # Set alpha1 to only work on a day that is NOT today
+    today_weekday = datetime.datetime.now().strftime("%w")
+    other_day = "1" if today_weekday != "1" else "2"
+    conn.execute("UPDATE user SET weekdays = ? WHERE id = ?", (other_day, 1))
     conn.commit()
 
     with (
-        patch("catcher_weighted.is_weekend", return_value=False),
-        patch("catcher_weighted.is_holiday", return_value=False),
+        patch("catcher.is_weekend", return_value=False),
+        patch("catcher.is_holiday", return_value=False),
     ):
         # On a weekday, should only return alpha2
-        mail, is_new = find_next_catcher_weighted(conn, tenant_id=1, dry_run=True)
+        mail, is_new = find_next_catcher(conn, tenant_id=1, dry_run=True)
 
         assert mail == "alpha2@example.com"
 
@@ -209,7 +211,7 @@ def test_weekday_filtering_per_tenant(test_db_with_tenant_users):
 
 def test_selection_history_scoped_per_tenant(test_db_with_tenant_users):
     """Test that selection history is properly scoped per tenant."""
-    from catcher_weighted import find_next_catcher_weighted
+    from catcher import find_next_catcher
     from unittest.mock import patch
 
     conn = sqlite3.connect(test_db_with_tenant_users)
@@ -224,17 +226,17 @@ def test_selection_history_scoped_per_tenant(test_db_with_tenant_users):
     conn.commit()
 
     with (
-        patch("catcher_weighted.is_weekend", return_value=False),
-        patch("catcher_weighted.is_holiday", return_value=False),
+        patch("catcher.is_weekend", return_value=False),
+        patch("catcher.is_holiday", return_value=False),
     ):
         # Should return alpha1 as already selected for tenant 1
-        mail, is_new = find_next_catcher_weighted(conn, tenant_id=1, dry_run=True)
+        mail, is_new = find_next_catcher(conn, tenant_id=1, dry_run=True)
 
         assert mail == "alpha1@example.com"
         assert is_new is False  # Already selected today
 
         # Tenant 2 should still select someone new
-        mail2, is_new2 = find_next_catcher_weighted(conn, tenant_id=2, dry_run=True)
+        mail2, is_new2 = find_next_catcher(conn, tenant_id=2, dry_run=True)
 
         assert mail2 in ["beta1@example.com", "beta2@example.com"]
         assert is_new2 is True  # New selection for tenant 2
