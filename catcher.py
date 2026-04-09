@@ -30,6 +30,7 @@ from cleanup import cleanup_old_selection_history
 # Import vacation sync
 try:
     from vacation_sync import VacationSync
+
     VACATION_SYNC_AVAILABLE = True
 except ImportError:
     VACATION_SYNC_AVAILABLE = False
@@ -107,28 +108,28 @@ VACATION_RETENTION_DAYS = int(
 def cleanup_old_vacations(conn: sqlite3.Connection, dry_run: bool = False) -> None:
     """
     Delete vacation entries older than VACATION_RETENTION_DAYS.
-    
+
     Args:
         conn: Database connection
         dry_run: If True, only log what would be deleted
     """
-    cutoff_date = (datetime.datetime.now() - datetime.timedelta(days=VACATION_RETENTION_DAYS)).date().isoformat()
-    
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT COUNT(*) FROM vacation WHERE end_date < ?",
-        (cutoff_date,)
+    cutoff_date = (
+        (datetime.datetime.now() - datetime.timedelta(days=VACATION_RETENTION_DAYS))
+        .date()
+        .isoformat()
     )
+
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM vacation WHERE end_date < ?", (cutoff_date,))
     count = cursor.fetchone()[0]
-    
+
     if count > 0:
         if dry_run:
-            logging.info(f"[DRY RUN] Would delete {count} vacation entries older than {cutoff_date}")
-        else:
-            cursor.execute(
-                "DELETE FROM vacation WHERE end_date < ?",
-                (cutoff_date,)
+            logging.info(
+                f"[DRY RUN] Would delete {count} vacation entries older than {cutoff_date}"
             )
+        else:
+            cursor.execute("DELETE FROM vacation WHERE end_date < ?", (cutoff_date,))
             conn.commit()
             logging.info(f"Deleted {count} vacation entries older than {cutoff_date}")
 
@@ -213,14 +214,12 @@ def process_tenant(
         logging.info(f"[{tenant['name']}] Starting selection...")
 
         # Sync vacations from iCal if configured
-        if VACATION_SYNC_AVAILABLE and tenant.get('ical_url'):
+        if VACATION_SYNC_AVAILABLE and tenant.get("ical_url"):
             logging.info(f"[{tenant['name']}] Syncing vacations from iCal...")
             try:
                 sync = VacationSync()
                 success, msg = sync.sync_tenant_vacations(
-                    tenant['id'], 
-                    tenant['name'], 
-                    tenant['ical_url']
+                    tenant["id"], tenant["name"], tenant["ical_url"]
                 )
                 if success:
                     logging.info(f"[{tenant['name']}] {msg}")
@@ -455,12 +454,15 @@ def is_user_on_vacation(conn: sqlite3.Connection, user_id: int, date: str) -> bo
         return False
 
 
-def get_last_working_day_catcher(conn: sqlite3.Connection) -> Optional[int]:
+def get_last_working_day_catcher(
+    conn: sqlite3.Connection, tenant_id: int = None
+) -> Optional[int]:
     """
     Get the user ID of the last working day's catcher (skipping weekends and holidays).
 
     Args:
         conn: Database connection
+        tenant_id: Tenant ID to filter by
 
     Returns:
         Optional[int]: User ID of the last working day's catcher, or None if no one was selected
@@ -487,14 +489,25 @@ def get_last_working_day_catcher(conn: sqlite3.Connection) -> Optional[int]:
                 pass
 
             # Check if someone was selected on this working day
-            cursor.execute(
-                """
-                SELECT user_id 
-                FROM selection_history 
-                WHERE selected_date = ?
-            """,
-                (check_date.isoformat(),),
-            )
+            if tenant_id:
+                cursor.execute(
+                    """
+                    SELECT sh.user_id
+                    FROM selection_history sh
+                    JOIN user u ON u.id = sh.user_id
+                    WHERE sh.selected_date = ? AND u.tenant_id = ?
+                """,
+                    (check_date.isoformat(), tenant_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT user_id
+                    FROM selection_history
+                    WHERE selected_date = ?
+                """,
+                    (check_date.isoformat(),),
+                )
 
             result = cursor.fetchone()
             if result:
@@ -810,7 +823,7 @@ def find_next_catcher(
                 return None, False
 
             # Get last working day's catcher
-            last_working_day_catcher_id = get_last_working_day_catcher(conn)
+            last_working_day_catcher_id = get_last_working_day_catcher(conn, tenant_id)
 
             # Check if we have alternatives to last working day's catcher
             has_alternatives = len(available_users) > 1 or (
@@ -964,7 +977,7 @@ def main() -> None:
         try:
             # Cleanup old vacations
             cleanup_old_vacations(conn, args.dry_run)
-            
+
             # Determine which tenants to process
             if args.tenant:
                 # Process specific tenant
