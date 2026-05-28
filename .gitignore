@@ -7,7 +7,9 @@ user.db
 .aider*
 __pycache__
 sent_emails/
+
 *.log
+*.ics
 
 saved-context/
 .coverage

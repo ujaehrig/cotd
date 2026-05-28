@@ -13,6 +13,8 @@
 import os
 import sys
 import json
+import hmac
+import hashlib
 import requests
 import sqlite3
 import logging
@@ -25,7 +27,7 @@ from typing import Optional, Dict, Tuple, List
 from pathlib import Path
 from dotenv import load_dotenv
 from db import DATABASE_PATH, get_db_connection
-from cleanup import cleanup_old_selection_history
+from cleanup import cleanup_old_selection_history, cleanup_old_takeover_log
 
 # Import vacation sync
 try:
@@ -90,6 +92,7 @@ HOLIDAY_API_BASE_URL = "https://date.nager.at/Api/v3/IsTodayPublicHoliday/DE"
 HOLIDAY_TIMEOUT = int(os.environ.get("HOLIDAY_API_TIMEOUT", "5"))  # seconds
 HOLIDAY_REGION = os.environ.get("HOLIDAY_REGION", "BW")  # German state code
 SLACK_TIMEOUT = int(os.environ.get("SLACK_API_TIMEOUT", "10"))  # seconds
+TAKEOVER_BASE_URL = os.environ.get("TAKEOVER_BASE_URL", "")
 
 # Weighted selection parameters
 BASE_WEIGHT = 100
@@ -146,7 +149,7 @@ def get_tenant_by_name(conn: sqlite3.Connection, name: str) -> Optional[Dict]:
         Tenant dict or None if not found
     """
     cursor = conn.execute(
-        "SELECT id, name, location, webhook_url, active, ical_url FROM tenants WHERE name = ?",
+        "SELECT id, name, location, webhook_url, active, ical_url, takeover_secret FROM tenants WHERE name = ?",
         (name,),
     )
     row = cursor.fetchone()
@@ -158,6 +161,7 @@ def get_tenant_by_name(conn: sqlite3.Connection, name: str) -> Optional[Dict]:
             "webhook_url": row[3],
             "active": row[4],
             "ical_url": row[5],
+            "takeover_secret": row[6],
         }
     return None
 
@@ -173,7 +177,7 @@ def get_active_tenants(conn: sqlite3.Connection) -> List[Dict]:
         List of tenant dicts
     """
     cursor = conn.execute(
-        "SELECT id, name, location, webhook_url, active, ical_url FROM tenants WHERE active = 1 ORDER BY id"
+        "SELECT id, name, location, webhook_url, active, ical_url, takeover_secret FROM tenants WHERE active = 1 ORDER BY id"
     )
     tenants = []
     for row in cursor.fetchall():
@@ -185,6 +189,7 @@ def get_active_tenants(conn: sqlite3.Connection) -> List[Dict]:
                 "webhook_url": row[3],
                 "active": row[4],
                 "ical_url": row[5],
+                "takeover_secret": row[6],
             }
         )
     return tenants
@@ -247,9 +252,16 @@ def process_tenant(
 
         if mail:
             if is_new_selection or force_notify:
+                # Generate registration URL for takeover
+                reg_url = generate_registration_url(
+                    tenant["id"], tenant.get("takeover_secret") or ""
+                )
                 # Trigger Slack if this is a new selection or force-notify is enabled
                 success = trigger_slack(
-                    mail, webhook_url=tenant["webhook_url"], dry_run=dry_run
+                    mail,
+                    webhook_url=tenant["webhook_url"],
+                    registration_url=reg_url,
+                    dry_run=dry_run,
                 )
                 if success:
                     logging.info(
@@ -336,9 +348,34 @@ def is_holiday(location: str = None) -> bool:
         return False
 
 
+def generate_registration_url(tenant_id: int, takeover_secret: str) -> str:
+    """
+    Generate a registration URL with a date-bound HMAC nonce.
+
+    Args:
+        tenant_id: Tenant ID
+        takeover_secret: Tenant's takeover secret
+
+    Returns:
+        Registration URL string, or empty string if not configured
+    """
+    if not TAKEOVER_BASE_URL or not takeover_secret:
+        logging.debug(
+            "No registration URL generated (TAKEOVER_BASE_URL=%s, secret=%s)",
+            "set" if TAKEOVER_BASE_URL else "missing",
+            "set" if takeover_secret else "missing",
+        )
+        return ""
+    today = datetime.date.today().isoformat()
+    msg = f"{tenant_id}{today}".encode()
+    nonce = hmac.new(takeover_secret.encode(), msg, hashlib.sha256).hexdigest()
+    return f"{TAKEOVER_BASE_URL}/takeover?tenant={tenant_id}&nonce={nonce}"
+
+
 def trigger_slack(
     mail: str,
     webhook_url: str,
+    registration_url: str = "",
     max_retries: int = 3,
     initial_retry_delay: int = 2,
     dry_run: bool = False,
@@ -364,7 +401,7 @@ def trigger_slack(
         logging.info(f"[DRY RUN] Would send Slack notification to: {mail}")
         return True
 
-    data: Dict[str, str] = {"uid": mail}
+    data: Dict[str, str] = {"uid": mail, "registration_url": registration_url}
     headers: Dict[str, str] = {"Content-type": "application/json"}
 
     if not webhook_url:
@@ -937,6 +974,7 @@ def find_next_catcher(
                 # Occasionally clean up old selection history (10% chance)
                 if not dry_run and random.random() < CLEANUP_PROBABILITY:
                     cleanup_old_selection_history(conn, CLEANUP_RETENTION_DAYS)
+                    cleanup_old_takeover_log(conn, CLEANUP_RETENTION_DAYS)
 
                 selected_weight = next(
                     wu["weight"]

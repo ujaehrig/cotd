@@ -174,6 +174,68 @@ uv run manage_vacations.py add john@example.com 2025-07-15
 uv run manage_vacations.py delete 5
 ```
 
+## Catcher Takeover
+
+When the selected catcher is unavailable, another team member can
+take over via a Slack button. The system uses HMAC-signed URLs to
+ensure only valid, same-day takeovers are possible.
+
+### How It Works
+
+1. `catcher.py` sends a `registration_url` along with the catcher
+   notification to Slack
+2. The Slack workflow shows an "I'll take over" button
+3. The volunteer clicks "Register", which opens the takeover URL
+4. The web app validates the HMAC nonce, replaces today's catcher,
+   and shows a confirmation page
+5. Only one takeover per tenant per day is allowed
+
+### Setup
+
+1. Run the migration:
+
+   ```bash
+   uv run migrate_takeover.py
+   ```
+
+2. Set a secret for each tenant:
+
+   ```bash
+   sqlite3 user.db \
+     "UPDATE tenants SET takeover_secret = '$(openssl rand -hex 32)' \
+      WHERE name = 'Team Name'"
+   ```
+
+3. Add the base URL to `.env`:
+
+   ```bash
+   TAKEOVER_BASE_URL=https://cotd.example.com
+   ```
+
+4. Run the takeover web app (e.g. via Docker):
+
+   ```bash
+   docker build -t cotd-takeover .
+   docker run -d -p 8090:8090 \
+     -v /path/to/user.db:/data/user.db cotd-takeover
+   ```
+
+### User Matching
+
+The takeover app matches the Slack username to users via:
+
+- Exact email match
+- Email prefix match (e.g. `john.doe` → `john.doe@example.com`)
+- Display name match
+
+Set display names for users whose Slack name differs from their
+email prefix:
+
+```bash
+uv run manage_users.py set-display-name \
+  "john.doe@example.com" "johnny"
+```
+
 ## Selection Algorithm
 
 The system uses a sophisticated weighted selection algorithm that:
@@ -217,6 +279,9 @@ uv run migrate_ical_support.py
 
 # Remove auth columns (after UI removal)
 uv run migrate_remove_auth.py
+
+# Catcher takeover support
+uv run migrate_takeover.py
 ```
 
 ## Configuration
@@ -244,9 +309,11 @@ The application uses SQLite with the following tables:
 - **user**: `id`, `mail`, `weekdays`, `last_chosen`, `tenant_id`,
   `display_name`
 - **tenants**: `id`, `name`, `location`, `webhook_url`, `active`,
-  `ical_url`, `created_at`
+  `ical_url`, `takeover_secret`, `created_at`
 - **vacation**: `id`, `user_id`, `start_date`, `end_date`, `source`,
   `last_synced`, `ical_event_uid`
 - **selection_history**: `id`, `user_id`, `selected_date`
 - **vacation_sync_log**: `id`, `tenant_id`, `sync_timestamp`,
   `status`, `events_processed`, `users_matched`, `error_message`
+- **takeover_log**: `id`, `tenant_id`, `takeover_date`,
+  `new_user_id`
