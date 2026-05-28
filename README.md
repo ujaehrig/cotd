@@ -282,7 +282,18 @@ uv run migrate_remove_auth.py
 
 # Catcher takeover support
 uv run migrate_takeover.py
+
+# Slack channel ID per tenant (REQUIRED: set channel IDs after running)
+uv run migrate_channel_id.py
 ```
+
+> **Warning:** After running `migrate_channel_id.py`, you must set
+> `slack_channel_id` for each tenant. Notifications will be skipped
+> for tenants without a channel ID configured.
+>
+> ```bash
+> uv run manage_tenants.py update "Team Name" --channel-id "CXXXXXXX"
+> ```
 
 ## Configuration
 
@@ -309,7 +320,7 @@ The application uses SQLite with the following tables:
 - **user**: `id`, `mail`, `weekdays`, `last_chosen`, `tenant_id`,
   `display_name`
 - **tenants**: `id`, `name`, `location`, `webhook_url`, `active`,
-  `ical_url`, `takeover_secret`, `created_at`
+  `ical_url`, `takeover_secret`, `slack_channel_id`, `created_at`
 - **vacation**: `id`, `user_id`, `start_date`, `end_date`, `source`,
   `last_synced`, `ical_event_uid`
 - **selection_history**: `id`, `user_id`, `selected_date`

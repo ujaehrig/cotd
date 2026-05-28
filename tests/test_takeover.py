@@ -138,6 +138,19 @@ class TestTakeoverApp:
         resp = client.get(f"/takeover?tenant=1&nonce={nonce}&uid=nobody")
         assert resp.status_code == 404
 
+    def test_uid_with_leading_at_sign(self, client, db):
+        nonce = self._make_nonce("1", "testsecret")
+        resp = client.get(f"/takeover?tenant=1&nonce={nonce}&uid=@bob.smith")
+        assert resp.status_code == 200
+
+        conn = sqlite3.connect(db)
+        row = conn.execute(
+            "SELECT user_id FROM selection_history WHERE selected_date = ?",
+            (datetime.date.today().isoformat(),),
+        ).fetchone()
+        assert row[0] == 2
+        conn.close()
+
     def test_takeover_resets_previous_catcher(self, client, db):
         today = datetime.date.today().isoformat()
         yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()

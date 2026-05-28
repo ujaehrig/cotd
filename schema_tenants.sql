@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     active BOOLEAN DEFAULT 1,
     ical_url VARCHAR(500),
     takeover_secret VARCHAR(200),
+    slack_channel_id VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

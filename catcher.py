@@ -149,7 +149,7 @@ def get_tenant_by_name(conn: sqlite3.Connection, name: str) -> Optional[Dict]:
         Tenant dict or None if not found
     """
     cursor = conn.execute(
-        "SELECT id, name, location, webhook_url, active, ical_url, takeover_secret FROM tenants WHERE name = ?",
+        "SELECT id, name, location, webhook_url, active, ical_url, takeover_secret, slack_channel_id FROM tenants WHERE name = ?",
         (name,),
     )
     row = cursor.fetchone()
@@ -162,6 +162,7 @@ def get_tenant_by_name(conn: sqlite3.Connection, name: str) -> Optional[Dict]:
             "active": row[4],
             "ical_url": row[5],
             "takeover_secret": row[6],
+            "slack_channel_id": row[7],
         }
     return None
 
@@ -177,7 +178,7 @@ def get_active_tenants(conn: sqlite3.Connection) -> List[Dict]:
         List of tenant dicts
     """
     cursor = conn.execute(
-        "SELECT id, name, location, webhook_url, active, ical_url, takeover_secret FROM tenants WHERE active = 1 ORDER BY id"
+        "SELECT id, name, location, webhook_url, active, ical_url, takeover_secret, slack_channel_id FROM tenants WHERE active = 1 ORDER BY id"
     )
     tenants = []
     for row in cursor.fetchall():
@@ -190,6 +191,7 @@ def get_active_tenants(conn: sqlite3.Connection) -> List[Dict]:
                 "active": row[4],
                 "ical_url": row[5],
                 "takeover_secret": row[6],
+                "slack_channel_id": row[7],
             }
         )
     return tenants
@@ -252,6 +254,12 @@ def process_tenant(
 
         if mail:
             if is_new_selection or force_notify:
+                # Skip notification if slack_channel_id is not configured
+                if not tenant.get("slack_channel_id"):
+                    logging.error(
+                        f"[{tenant['name']}] No slack_channel_id configured, skipping notification"
+                    )
+                    return False
                 # Generate registration URL for takeover
                 reg_url = generate_registration_url(
                     tenant["id"], tenant.get("takeover_secret") or ""
@@ -261,6 +269,7 @@ def process_tenant(
                     mail,
                     webhook_url=tenant["webhook_url"],
                     registration_url=reg_url,
+                    channel_id=tenant["slack_channel_id"],
                     dry_run=dry_run,
                 )
                 if success:
@@ -376,6 +385,7 @@ def trigger_slack(
     mail: str,
     webhook_url: str,
     registration_url: str = "",
+    channel_id: str = "",
     max_retries: int = 3,
     initial_retry_delay: int = 2,
     dry_run: bool = False,
@@ -401,7 +411,7 @@ def trigger_slack(
         logging.info(f"[DRY RUN] Would send Slack notification to: {mail}")
         return True
 
-    data: Dict[str, str] = {"uid": mail, "registration_url": registration_url}
+    data: Dict[str, str] = {"uid": mail, "registration_url": registration_url, "channel_id": channel_id}
     headers: Dict[str, str] = {"Content-type": "application/json"}
 
     if not webhook_url:
