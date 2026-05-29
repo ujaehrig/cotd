@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2026-05-29b] - SQLite Concurrency
+
+### Added
+
+- WAL journal mode for concurrent access from catcher and takeover app
+- `busy_timeout` (5s) to handle simultaneous writes gracefully
+
 ## [2026-05-29] - Slack Channel ID per Tenant
 
 ### Added

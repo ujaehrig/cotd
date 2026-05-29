@@ -19,5 +19,7 @@ def get_db_connection(db_path: str = None) -> sqlite3.Connection:
     """
     path = db_path or DATABASE_PATH
     conn = sqlite3.connect(path)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.row_factory = sqlite3.Row
     return conn
