@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2026-05-29c] - CI/CD
+
+### Added
+
+- GitHub Actions workflow to build and push Docker image to ghcr.io
+  on changes to takeover app
+
 ## [2026-05-29b] - SQLite Concurrency
 
 ### Added
