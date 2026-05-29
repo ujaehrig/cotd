@@ -395,6 +395,7 @@ class TestProcessTenant:
             "webhook_url": "https://hooks.example.com/alpha",
             "active": 1,
             "ical_url": None,
+            "slack_channel_id": "C12345",
         }
 
     @patch("catcher.trigger_slack", return_value=True)

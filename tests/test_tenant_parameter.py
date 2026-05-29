@@ -26,16 +26,16 @@ def test_db_with_tenants(tmp_path):
 
     # Add test tenants
     conn.execute(
-        "INSERT INTO tenants (name, location, webhook_url, active) VALUES (?, ?, ?, ?)",
-        ("Team Alpha", "BW", "https://example.com/alpha", 1),
+        "INSERT INTO tenants (name, location, webhook_url, active, slack_channel_id) VALUES (?, ?, ?, ?, ?)",
+        ("Team Alpha", "BW", "https://example.com/alpha", 1, "C12345"),
     )
     conn.execute(
-        "INSERT INTO tenants (name, location, webhook_url, active) VALUES (?, ?, ?, ?)",
-        ("Team Beta", "BY", "https://example.com/beta", 1),
+        "INSERT INTO tenants (name, location, webhook_url, active, slack_channel_id) VALUES (?, ?, ?, ?, ?)",
+        ("Team Beta", "BY", "https://example.com/beta", 1, "C67890"),
     )
     conn.execute(
-        "INSERT INTO tenants (name, location, webhook_url, active) VALUES (?, ?, ?, ?)",
-        ("Team Inactive", "BE", "https://example.com/inactive", 0),
+        "INSERT INTO tenants (name, location, webhook_url, active, slack_channel_id) VALUES (?, ?, ?, ?, ?)",
+        ("Team Inactive", "BE", "https://example.com/inactive", 0, "C99999"),
     )
     conn.commit()
 

@@ -73,7 +73,7 @@ def _verify_nonce(tenant_id: str, nonce: str, secret: str) -> bool:
 def takeover():
     tenant_id = request.args.get("tenant", "")
     nonce = request.args.get("nonce", "")
-    uid = request.args.get("uid", "")
+    uid = request.args.get("uid", "").lstrip("@")
 
     if not tenant_id or not nonce or not uid:
         return ERROR_HTML.format(message="Missing parameters."), 400

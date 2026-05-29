@@ -63,7 +63,7 @@ def cmd_list(args):
     """List all tenants."""
     conn = get_db_connection(get_db_path(args))
 
-    query = "SELECT id, name, location, webhook_url, active, ical_url FROM tenants"
+    query = "SELECT id, name, location, webhook_url, active, ical_url, takeover_secret, slack_channel_id FROM tenants"
     if args.active_only:
         query += " WHERE active = 1"
     query += " ORDER BY id"
@@ -76,14 +76,27 @@ def cmd_list(args):
         print("No tenants found")
         return
 
-    print(f"{'ID':<5} {'Name':<30} {'Location':<10} {'Active':<8} {'iCal URL':<50}")
-    print("-" * 103)
-    for tenant in tenants:
-        active_str = "Yes" if tenant[4] else "No"
-        ical_url = tenant[5] if tenant[5] else "(not set)"
-        print(
-            f"{tenant[0]:<5} {tenant[1]:<30} {tenant[2]:<10} {active_str:<8} {ical_url:<50}"
-        )
+    if args.long:
+        for tenant in tenants:
+            active_str = "Yes" if tenant[4] else "No"
+            print(f"ID:             {tenant[0]}")
+            print(f"Name:           {tenant[1]}")
+            print(f"Location:       {tenant[2]}")
+            print(f"Active:         {active_str}")
+            print(f"Webhook URL:    {tenant[3]}")
+            print(f"iCal URL:       {tenant[5] or '(not set)'}")
+            print(f"Takeover Secret:{' (set)' if tenant[6] else ' (not set)'}")
+            print(f"Channel ID:     {tenant[7] or '(not set)'}")
+            print()
+    else:
+        print(f"{'ID':<5} {'Name':<30} {'Location':<10} {'Active':<8} {'Channel ID':<12}")
+        print("-" * 65)
+        for tenant in tenants:
+            active_str = "Yes" if tenant[4] else "No"
+            channel = tenant[7] or "(not set)"
+            print(
+                f"{tenant[0]:<5} {tenant[1]:<30} {tenant[2]:<10} {active_str:<8} {channel:<12}"
+            )
 
 
 def cmd_add(args):
@@ -137,6 +150,9 @@ def cmd_update(args):
             validate_url(args.ical_url, "ical_url")
         updates.append("ical_url = ?")
         params.append(args.ical_url if args.ical_url else None)
+    if getattr(args, "channel_id", None) is not None:
+        updates.append("slack_channel_id = ?")
+        params.append(args.channel_id if args.channel_id else None)
 
     if not updates:
         print("Error: No fields to update", file=sys.stderr)
@@ -313,6 +329,9 @@ def main():
     list_parser.add_argument(
         "--active-only", action="store_true", help="Show only active tenants"
     )
+    list_parser.add_argument(
+        "-l", "--long", action="store_true", help="Show all fields"
+    )
 
     # Add command
     add_parser = subparsers.add_parser("add", help="Add a new tenant")
@@ -327,6 +346,7 @@ def main():
     update_parser.add_argument("--location", help="New location")
     update_parser.add_argument("--webhook", help="New webhook URL")
     update_parser.add_argument("--ical-url", help="iCal feed URL (use empty string to clear)")
+    update_parser.add_argument("--channel-id", help="Slack channel ID for notifications")
 
     # Deactivate command
     deactivate_parser = subparsers.add_parser("deactivate", help="Deactivate a tenant")
