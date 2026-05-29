@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2026-05-29e] - Docker Versioning
+
+### Changed
+
+- Docker workflow uses semver tags from git tags (e.g. `v1.0.0`)
+- Added `docker/metadata-action` for automatic tag generation
+
 ## [2026-05-29d] - CI Fix
 
 ### Fixed
