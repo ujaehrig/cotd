@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2026-05-29d] - CI Fix
+
+### Fixed
+
+- Add `workflow_dispatch` trigger for manual Docker builds
+
 ## [2026-05-29c] - CI/CD
 
 ### Added
