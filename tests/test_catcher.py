@@ -39,7 +39,6 @@ def db(tmp_path):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             mail VARCHAR(50) UNIQUE NOT NULL,
             weekdays VARCHAR(10),
-            last_chosen DATE,
             tenant_id INTEGER REFERENCES tenants(id),
             display_name VARCHAR(100)
         );
@@ -57,7 +56,9 @@ def db(tmp_path):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             selected_date DATE NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES user(id)
+            tenant_id INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES user(id),
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id)
         );
     """)
 
@@ -73,12 +74,12 @@ def db(tmp_path):
 
     # Seed users for Team Alpha (tenant_id=1)
     conn.execute(
-        "INSERT INTO user (mail, weekdays, last_chosen, tenant_id) VALUES (?, ?, ?, ?)",
-        ("alice@example.com", "1,2,3,4,5", "2026-03-01", 1),
+        "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
+        ("alice@example.com", "1,2,3,4,5", 1),
     )
     conn.execute(
-        "INSERT INTO user (mail, weekdays, last_chosen, tenant_id) VALUES (?, ?, ?, ?)",
-        ("bob@example.com", "1,2,3,4,5", "2026-03-20", 1),
+        "INSERT INTO user (mail, weekdays, tenant_id) VALUES (?, ?, ?)",
+        ("bob@example.com", "1,2,3,4,5", 1),
     )
     conn.commit()
     yield conn
@@ -182,14 +183,14 @@ class TestGetRecentSelectionCount:
     def test_counts_recent(self, db):
         today = datetime.date.today().isoformat()
         db.execute(
-            "INSERT INTO selection_history (user_id, selected_date) VALUES (1, ?)",
+            "INSERT INTO selection_history (user_id, selected_date, tenant_id) VALUES (1, ?, 1)",
             (today,),
         )
         db.commit()
-        assert get_recent_selection_count(db, 1) >= 1
+        assert get_recent_selection_count(db, 1, tenant_id=1) >= 1
 
     def test_zero_when_none(self, db):
-        assert get_recent_selection_count(db, 1) == 0
+        assert get_recent_selection_count(db, 1, tenant_id=1) == 0
 
 
 # --- cleanup_old_selection_history ---
@@ -199,7 +200,7 @@ class TestCleanupOldSelectionHistory:
     def test_deletes_old_records(self, db):
         old = (datetime.date.today() - datetime.timedelta(days=400)).isoformat()
         db.execute(
-            "INSERT INTO selection_history (user_id, selected_date) VALUES (1, ?)",
+            "INSERT INTO selection_history (user_id, selected_date, tenant_id) VALUES (1, ?, 1)",
             (old,),
         )
         db.commit()
@@ -210,7 +211,7 @@ class TestCleanupOldSelectionHistory:
     def test_keeps_recent_records(self, db):
         recent = datetime.date.today().isoformat()
         db.execute(
-            "INSERT INTO selection_history (user_id, selected_date) VALUES (1, ?)",
+            "INSERT INTO selection_history (user_id, selected_date, tenant_id) VALUES (1, ?, 1)",
             (recent,),
         )
         db.commit()
@@ -253,15 +254,15 @@ class TestCalculateUserWeight:
 
 class TestAddTieBreakingLogic:
     def test_single_user_unchanged(self):
-        users = [{"user": {"mail": "a@b.com", "last_chosen": None}, "weight": 100}]
+        users = [{"user": {"mail": "a@b.com"}, "weight": 100, "last_selected": None}]
         result = add_tie_breaking_logic(users)
         assert len(result) == 1
         assert result[0]["weight"] == 100
 
     def test_tied_users_get_different_weights(self):
         users = [
-            {"user": {"mail": "a@b.com", "last_chosen": "2026-01-01"}, "weight": 100},
-            {"user": {"mail": "b@b.com", "last_chosen": "2026-02-01"}, "weight": 100},
+            {"user": {"mail": "a@b.com"}, "weight": 100, "last_selected": "2026-01-01"},
+            {"user": {"mail": "b@b.com"}, "weight": 100, "last_selected": "2026-02-01"},
         ]
         result = add_tie_breaking_logic(users)
         weights = [u["weight"] for u in result]
@@ -269,8 +270,8 @@ class TestAddTieBreakingLogic:
 
     def test_never_selected_wins_tie(self):
         users = [
-            {"user": {"mail": "recent@b.com", "last_chosen": "2026-03-01"}, "weight": 100},
-            {"user": {"mail": "never@b.com", "last_chosen": None}, "weight": 100},
+            {"user": {"mail": "recent@b.com"}, "weight": 100, "last_selected": "2026-03-01"},
+            {"user": {"mail": "never@b.com"}, "weight": 100, "last_selected": None},
         ]
         result = add_tie_breaking_logic(users)
         # Never-selected should get higher tie-breaker
@@ -444,7 +445,7 @@ class TestFindNextCatcherWeighted:
         today = datetime.date.today().isoformat()
         db.execute("UPDATE user SET weekdays = ?", ("0,1,2,3,4,5,6",))
         db.execute(
-            "INSERT INTO selection_history (user_id, selected_date) VALUES (1, ?)",
+            "INSERT INTO selection_history (user_id, selected_date, tenant_id) VALUES (1, ?, 1)",
             (today,),
         )
         db.commit()

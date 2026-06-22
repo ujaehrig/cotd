@@ -42,7 +42,6 @@ def test_db_with_tenant_users(tmp_path):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             mail VARCHAR(50) UNIQUE NOT NULL,
             weekdays VARCHAR(10),
-            last_chosen DATE,
             tenant_id INTEGER REFERENCES tenants(id)
         )
     """)
@@ -62,7 +61,8 @@ def test_db_with_tenant_users(tmp_path):
         CREATE TABLE selection_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER REFERENCES user(id),
-            selected_date DATE
+            selected_date DATE,
+            tenant_id INTEGER NOT NULL
         )
     """)
 
@@ -220,8 +220,8 @@ def test_selection_history_scoped_per_tenant(test_db_with_tenant_users):
 
     # Add selection history for alpha1 today
     conn.execute(
-        "INSERT INTO selection_history (user_id, selected_date) VALUES (?, ?)",
-        (1, today),
+        "INSERT INTO selection_history (user_id, selected_date, tenant_id) VALUES (?, ?, ?)",
+        (1, today, 1),
     )
     conn.commit()
 

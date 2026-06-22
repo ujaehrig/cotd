@@ -45,7 +45,6 @@ def test_db_with_tenants(tmp_path):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             mail VARCHAR(50) UNIQUE NOT NULL,
             weekdays VARCHAR(10),
-            last_chosen DATE,
             tenant_id INTEGER REFERENCES tenants(id)
         )
     """)

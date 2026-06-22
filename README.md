@@ -144,6 +144,9 @@ uv run manage_users.py add "john.doe@example.com" "Team Name" \
 uv run manage_users.py update "john.doe@example.com" \
   --weekdays "0,1,2"
 
+# Move user to a different tenant
+uv run manage_users.py move "john.doe@example.com" "New Team"
+
 # Set display name for iCal matching
 uv run manage_users.py set-display-name \
   "john.doe@example.com" "Johnny"
@@ -285,6 +288,9 @@ uv run migrate_takeover.py
 
 # Slack channel ID per tenant (REQUIRED: set channel IDs after running)
 uv run migrate_channel_id.py
+
+# Tenant-scoped selection history + remove user.last_chosen
+uv run migrate_selection_history_tenant.py
 ```
 
 > **Warning:** After running `migrate_channel_id.py`, you must set
@@ -317,13 +323,12 @@ VACATION_RETENTION_DAYS=90
 
 The application uses SQLite with the following tables:
 
-- **user**: `id`, `mail`, `weekdays`, `last_chosen`, `tenant_id`,
-  `display_name`
+- **user**: `id`, `mail`, `weekdays`, `tenant_id`, `display_name`
 - **tenants**: `id`, `name`, `location`, `webhook_url`, `active`,
   `ical_url`, `takeover_secret`, `slack_channel_id`, `created_at`
 - **vacation**: `id`, `user_id`, `start_date`, `end_date`, `source`,
   `last_synced`, `ical_event_uid`
-- **selection_history**: `id`, `user_id`, `selected_date`
+- **selection_history**: `id`, `user_id`, `selected_date`, `tenant_id`
 - **vacation_sync_log**: `id`, `tenant_id`, `sync_timestamp`,
   `status`, `events_processed`, `users_matched`, `error_message`
 - **takeover_log**: `id`, `tenant_id`, `takeover_date`,
