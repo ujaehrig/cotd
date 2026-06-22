@@ -16,8 +16,7 @@ def db_with_vacation(tmp_path):
         CREATE TABLE user (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             mail VARCHAR(50) UNIQUE NOT NULL,
-            weekdays VARCHAR(10),
-            last_chosen DATE
+            weekdays VARCHAR(10)
         )
     """)
     conn.execute("""

@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS user (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     mail VARCHAR(50) UNIQUE NOT NULL,
     weekdays VARCHAR(10),
-    last_chosen DATE,
     tenant_id INTEGER REFERENCES tenants(id),
     display_name VARCHAR(100)
 );
@@ -38,7 +37,9 @@ CREATE TABLE IF NOT EXISTS selection_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     selected_date DATE NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES user(id)
+    tenant_id INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES user(id),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 
 CREATE TABLE IF NOT EXISTS vacation_sync_log (
@@ -63,3 +64,5 @@ CREATE INDEX IF NOT EXISTS idx_selection_history_date
     ON selection_history(selected_date);
 CREATE INDEX IF NOT EXISTS idx_selection_history_user
     ON selection_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_selection_history_tenant_date
+    ON selection_history(tenant_id, selected_date);

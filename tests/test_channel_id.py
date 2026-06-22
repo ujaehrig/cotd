@@ -27,7 +27,6 @@ def db(tmp_path):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             mail VARCHAR(50) UNIQUE NOT NULL,
             weekdays VARCHAR(10),
-            last_chosen DATE,
             tenant_id INTEGER REFERENCES tenants(id),
             display_name VARCHAR(100)
         );
@@ -45,7 +44,9 @@ def db(tmp_path):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             selected_date DATE NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES user(id)
+            tenant_id INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES user(id),
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id)
         );
     """)
     conn.execute(

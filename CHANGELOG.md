@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2026-06-22] - Tenant-Scoped Selection History
+
+### Added
+
+- `tenant_id` column on `selection_history` for per-tenant fairness
+- `move` command in `manage_users.py` to relocate users between
+  tenants
+- Migration script `migrate_selection_history_tenant.py`
+- Index on `(tenant_id, selected_date)` for query performance
+
+### Changed
+
+- Fairness algorithm now scopes `recent_selections`,
+  `total_selections`, and "days since last selected" per tenant
+- `get_last_working_day_catcher` queries `selection_history.tenant_id`
+  directly instead of JOINing through `user`
+- `user_statistics.py` groups stats by `selection_history.tenant_id`
+- `manage_vacations.py list-users` derives last selected date from
+  history instead of `user.last_chosen`
+- Takeover app uses `selection_history.tenant_id` for scoping
+
+### Removed
+
+- `user.last_chosen` column (replaced by
+  `MAX(selected_date) FROM selection_history WHERE tenant_id = ?`)
+
+### Migration Notes
+
+Run `uv run migrate_selection_history_tenant.py` before deploying.
+The migration backfills `tenant_id` from the user's current tenant.
+If any user has already moved between tenants, manually fix their
+old `selection_history` rows afterward.
+
 ## [2026-05-29d] - CI Fix
 
 ### Fixed

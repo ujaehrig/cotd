@@ -103,8 +103,7 @@ def takeover():
 
         # Check if a takeover already happened today for this tenant
         existing = conn.execute(
-            "SELECT user_id FROM selection_history WHERE selected_date = ? AND user_id IN "
-            "(SELECT id FROM user WHERE tenant_id = ?)",
+            "SELECT user_id FROM selection_history WHERE selected_date = ? AND tenant_id = ?",
             (today, tenant_id),
         ).fetchone()
         if existing and existing[0] == user[0]:
@@ -119,34 +118,15 @@ def takeover():
                 message="A takeover has already been registered today."
             ), 409
 
-        # Find the previous catcher and reset their last_chosen
-        prev = conn.execute(
-            "SELECT user_id FROM selection_history WHERE selected_date = ? AND user_id IN "
-            "(SELECT id FROM user WHERE tenant_id = ?)",
-            (today, tenant_id),
-        ).fetchone()
-        if prev:
-            prior = conn.execute(
-                "SELECT selected_date FROM selection_history "
-                "WHERE user_id = ? AND selected_date < ? ORDER BY selected_date DESC LIMIT 1",
-                (prev[0], today),
-            ).fetchone()
-            conn.execute(
-                "UPDATE user SET last_chosen = ? WHERE id = ?",
-                (prior[0] if prior else None, prev[0]),
-            )
-
         # Replace today's selection_history entry
         conn.execute(
-            "DELETE FROM selection_history WHERE selected_date = ? AND user_id IN "
-            "(SELECT id FROM user WHERE tenant_id = ?)",
+            "DELETE FROM selection_history WHERE selected_date = ? AND tenant_id = ?",
             (today, tenant_id),
         )
         conn.execute(
-            "INSERT INTO selection_history (user_id, selected_date) VALUES (?, ?)",
-            (user[0], today),
+            "INSERT INTO selection_history (user_id, selected_date, tenant_id) VALUES (?, ?, ?)",
+            (user[0], today, tenant_id),
         )
-        conn.execute("UPDATE user SET last_chosen = ? WHERE id = ?", (today, user[0]))
         conn.execute(
             "INSERT INTO takeover_log (tenant_id, takeover_date, new_user_id) VALUES (?, ?, ?)",
             (tenant_id, today, user[0]),

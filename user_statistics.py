@@ -14,19 +14,22 @@ def get_user_statistics(tenant_name=None):
     cursor = conn.cursor()
 
     if tenant_name:
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT
                 t.name as tenant_name,
                 u.mail,
                 COUNT(sh.id) as total_selections,
                 MAX(sh.selected_date) as last_selection
             FROM user u
-            LEFT JOIN selection_history sh ON u.id = sh.user_id
             LEFT JOIN tenants t ON u.tenant_id = t.id
+            LEFT JOIN selection_history sh ON u.id = sh.user_id AND sh.tenant_id = t.id
             WHERE t.name = ?
             GROUP BY u.tenant_id, u.id, u.mail
             ORDER BY total_selections DESC
-        """, (tenant_name,))
+        """,
+            (tenant_name,),
+        )
     else:
         cursor.execute("""
             SELECT
@@ -35,8 +38,8 @@ def get_user_statistics(tenant_name=None):
                 COUNT(sh.id) as total_selections,
                 MAX(sh.selected_date) as last_selection
             FROM user u
-            LEFT JOIN selection_history sh ON u.id = sh.user_id
             LEFT JOIN tenants t ON u.tenant_id = t.id
+            LEFT JOIN selection_history sh ON u.id = sh.user_id AND sh.tenant_id = t.id
             GROUP BY u.tenant_id, u.id, u.mail
             ORDER BY t.name, total_selections DESC
         """)
@@ -55,7 +58,7 @@ def get_user_statistics(tenant_name=None):
         print(f"{'Email':<40} {'Selections':<12} {'%':<8} {'Last':<12}")
         print("-" * 77)
         for mail, selections, last in users:
-            pct = f"{selections/total*100:.1f}" if total > 0 else "0.0"
+            pct = f"{selections / total * 100:.1f}" if total > 0 else "0.0"
             print(f"{mail:<40} {selections:<12} {pct:<8} {last or 'N/A':<12}")
 
 

@@ -27,8 +27,11 @@ def get_db_path(args):
 
 def validate_weekdays(value):
     """Validate weekdays is a comma-separated list of digits 0-6."""
-    if not re.match(r'^[0-6](,[0-6])*$', value):
-        print("Error: weekdays must be comma-separated digits 0-6 (0=Sun, 1=Mon, ..., 6=Sat)", file=sys.stderr)
+    if not re.match(r"^[0-6](,[0-6])*$", value):
+        print(
+            "Error: weekdays must be comma-separated digits 0-6 (0=Sun, 1=Mon, ..., 6=Sat)",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
@@ -50,10 +53,12 @@ def cmd_list(args):
         FROM user u
         LEFT JOIN tenants t ON u.tenant_id = t.id
     """
-    
+
     if args.tenant:
         query += " WHERE t.name = ? OR t.id = ?"
-        cursor = conn.execute(query, (args.tenant, args.tenant if args.tenant.isdigit() else -1))
+        cursor = conn.execute(
+            query, (args.tenant, args.tenant if args.tenant.isdigit() else -1)
+        )
     else:
         query += " ORDER BY u.id"
         cursor = conn.execute(query)
@@ -89,8 +94,7 @@ def cmd_set_display_name(args):
     display_name = args.display_name if args.display_name else None
 
     conn.execute(
-        "UPDATE user SET display_name = ? WHERE id = ?",
-        (display_name, user_id)
+        "UPDATE user SET display_name = ? WHERE id = ?", (display_name, user_id)
     )
     conn.commit()
     conn.close()
@@ -140,7 +144,7 @@ def cmd_add(args):
     # Get tenant ID
     cursor = conn.execute(
         "SELECT id FROM tenants WHERE name = ? OR id = ?",
-        (args.tenant, args.tenant if args.tenant.isdigit() else -1)
+        (args.tenant, args.tenant if args.tenant.isdigit() else -1),
     )
     tenant_row = cursor.fetchone()
     if not tenant_row:
@@ -154,7 +158,7 @@ def cmd_add(args):
     validate_weekdays(weekdays)
     conn.execute(
         "INSERT INTO user (mail, weekdays, tenant_id, display_name) VALUES (?, ?, ?, ?)",
-        (args.email, weekdays, tenant_id, args.display_name)
+        (args.email, weekdays, tenant_id, args.display_name),
     )
     conn.commit()
     conn.close()
@@ -186,7 +190,7 @@ def cmd_update(args):
     if args.tenant:
         cursor = conn.execute(
             "SELECT id FROM tenants WHERE name = ? OR id = ?",
-            (args.tenant, args.tenant if args.tenant.isdigit() else -1)
+            (args.tenant, args.tenant if args.tenant.isdigit() else -1),
         )
         tenant_row = cursor.fetchone()
         if not tenant_row:
@@ -233,10 +237,50 @@ def cmd_delete(args):
     print(f"User '{email}' deleted successfully")
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Manage users for Catcher of the Day"
+def cmd_move(args):
+    """Move a user to a different tenant."""
+    conn = get_db_connection(get_db_path(args))
+
+    user = get_user_by_id_or_email(conn, args.identifier)
+    if not user:
+        print(f"Error: User '{args.identifier}' not found", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+
+    user_id, email, _, current_tenant_id = user
+
+    # Resolve target tenant
+    cursor = conn.execute(
+        "SELECT id, name FROM tenants WHERE name = ? OR id = ?",
+        (args.tenant, args.tenant if args.tenant.isdigit() else -1),
     )
+    tenant_row = cursor.fetchone()
+    if not tenant_row:
+        print(f"Error: Tenant '{args.tenant}' not found", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+
+    new_tenant_id, new_tenant_name = tenant_row[0], tenant_row[1]
+
+    if new_tenant_id == current_tenant_id:
+        print(f"User '{email}' is already in tenant '{new_tenant_name}'")
+        conn.close()
+        return
+
+    # Get current tenant name for logging
+    cursor = conn.execute("SELECT name FROM tenants WHERE id = ?", (current_tenant_id,))
+    old_tenant_row = cursor.fetchone()
+    old_tenant_name = old_tenant_row[0] if old_tenant_row else "(no tenant)"
+
+    conn.execute("UPDATE user SET tenant_id = ? WHERE id = ?", (new_tenant_id, user_id))
+    conn.commit()
+    conn.close()
+
+    print(f"User '{email}' moved from '{old_tenant_name}' to '{new_tenant_name}'")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Manage users for Catcher of the Day")
     parser.add_argument("--db", help="Database path (overrides DB_PATH env var)")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -250,15 +294,21 @@ def main():
     show_parser.add_argument("identifier", help="User ID or email")
 
     # Set display name command
-    set_name_parser = subparsers.add_parser("set-display-name", help="Set display name for a user")
+    set_name_parser = subparsers.add_parser(
+        "set-display-name", help="Set display name for a user"
+    )
     set_name_parser.add_argument("identifier", help="User ID or email")
-    set_name_parser.add_argument("display_name", help="Display name/nickname (use empty string to clear)")
+    set_name_parser.add_argument(
+        "display_name", help="Display name/nickname (use empty string to clear)"
+    )
 
     # Add command
     add_parser = subparsers.add_parser("add", help="Add a new user")
     add_parser.add_argument("email", help="User email address")
     add_parser.add_argument("tenant", help="Tenant name or ID")
-    add_parser.add_argument("--weekdays", help="Available weekdays (default: 1,2,3,4,5 for Mon-Fri)")
+    add_parser.add_argument(
+        "--weekdays", help="Available weekdays (default: 1,2,3,4,5 for Mon-Fri)"
+    )
     add_parser.add_argument("--display-name", help="Display name/nickname")
 
     # Update command
@@ -271,6 +321,13 @@ def main():
     # Delete command
     delete_parser = subparsers.add_parser("delete", help="Delete a user")
     delete_parser.add_argument("identifier", help="User ID or email")
+
+    # Move command
+    move_parser = subparsers.add_parser(
+        "move", help="Move a user to a different tenant"
+    )
+    move_parser.add_argument("identifier", help="User ID or email")
+    move_parser.add_argument("tenant", help="Target tenant name or ID")
 
     args = parser.parse_args()
 
@@ -287,6 +344,8 @@ def main():
         cmd_update(args)
     elif args.command == "delete":
         cmd_delete(args)
+    elif args.command == "move":
+        cmd_move(args)
 
 
 if __name__ == "__main__":

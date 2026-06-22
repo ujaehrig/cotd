@@ -151,21 +151,20 @@ class TestTakeoverApp:
         assert row[0] == 2
         conn.close()
 
-    def test_takeover_resets_previous_catcher(self, client, db):
+    def test_takeover_replaces_selection(self, client, db):
         today = datetime.date.today().isoformat()
         yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
 
         # Set up: alice was selected today, had a prior selection yesterday
         conn = sqlite3.connect(db)
         conn.execute(
-            "INSERT INTO selection_history (user_id, selected_date) VALUES (1, ?)",
+            "INSERT INTO selection_history (user_id, selected_date, tenant_id) VALUES (1, ?, 1)",
             (yesterday,),
         )
         conn.execute(
-            "INSERT INTO selection_history (user_id, selected_date) VALUES (1, ?)",
+            "INSERT INTO selection_history (user_id, selected_date, tenant_id) VALUES (1, ?, 1)",
             (today,),
         )
-        conn.execute("UPDATE user SET last_chosen = ? WHERE id = 1", (today,))
         conn.commit()
         conn.close()
 
@@ -174,13 +173,13 @@ class TestTakeoverApp:
         resp = client.get(f"/takeover?tenant=1&nonce={nonce}&uid=bob.smith")
         assert resp.status_code == 200
 
-        # Verify alice's last_chosen was reset to yesterday
+        # Verify bob is now today's catcher
         conn = sqlite3.connect(db)
-        alice = conn.execute("SELECT last_chosen FROM user WHERE id = 1").fetchone()
-        assert alice[0] == yesterday
-        # Bob is now today's catcher
-        bob = conn.execute("SELECT last_chosen FROM user WHERE id = 2").fetchone()
-        assert bob[0] == today
+        row = conn.execute(
+            "SELECT user_id FROM selection_history WHERE selected_date = ? AND tenant_id = 1",
+            (today,),
+        ).fetchone()
+        assert row[0] == 2
         conn.close()
 
     def test_second_takeover_same_day_returns_409(self, client, db):

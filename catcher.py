@@ -411,7 +411,11 @@ def trigger_slack(
         logging.info(f"[DRY RUN] Would send Slack notification to: {mail}")
         return True
 
-    data: Dict[str, str] = {"uid": mail, "registration_url": registration_url, "channel_id": channel_id}
+    data: Dict[str, str] = {
+        "uid": mail,
+        "registration_url": registration_url,
+        "channel_id": channel_id,
+    }
     headers: Dict[str, str] = {"Content-type": "application/json"}
 
     if not webhook_url:
@@ -539,10 +543,9 @@ def get_last_working_day_catcher(
             if tenant_id:
                 cursor.execute(
                     """
-                    SELECT sh.user_id
-                    FROM selection_history sh
-                    JOIN user u ON u.id = sh.user_id
-                    WHERE sh.selected_date = ? AND u.tenant_id = ?
+                    SELECT user_id
+                    FROM selection_history
+                    WHERE selected_date = ? AND tenant_id = ?
                 """,
                     (check_date.isoformat(), tenant_id),
                 )
@@ -568,7 +571,10 @@ def get_last_working_day_catcher(
 
 
 def get_recent_selection_count(
-    conn: sqlite3.Connection, user_id: int, days: int = LOOKBACK_DAYS
+    conn: sqlite3.Connection,
+    user_id: int,
+    tenant_id: int = None,
+    days: int = LOOKBACK_DAYS,
 ) -> int:
     """
     Get the number of times a user was selected in the last N days.
@@ -576,6 +582,7 @@ def get_recent_selection_count(
     Args:
         conn: Database connection
         user_id: User ID to check
+        tenant_id: Tenant ID to filter by
         days: Number of days to look back
 
     Returns:
@@ -586,15 +593,27 @@ def get_recent_selection_count(
             datetime.date.today() - datetime.timedelta(days=days)
         ).isoformat()
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT COUNT(*) 
-            FROM selection_history 
-            WHERE user_id = ? 
-              AND selected_date >= ?
-        """,
-            (user_id, cutoff_date),
-        )
+        if tenant_id:
+            cursor.execute(
+                """
+                SELECT COUNT(*) 
+                FROM selection_history 
+                WHERE user_id = ? 
+                  AND tenant_id = ?
+                  AND selected_date >= ?
+            """,
+                (user_id, tenant_id, cutoff_date),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT COUNT(*) 
+                FROM selection_history 
+                WHERE user_id = ? 
+                  AND selected_date >= ?
+            """,
+                (user_id, cutoff_date),
+            )
 
         return cursor.fetchone()[0]
     except sqlite3.Error as e:
@@ -681,12 +700,11 @@ def add_tie_breaking_logic(weighted_users: List[Dict]) -> List[Dict]:
             # No tie to break
             result.extend(users)
         else:
-            # Break ties by last_chosen date, then by email
+            # Break ties by last_selected date, then by email
             users_sorted = sorted(
                 users,
                 key=lambda wu: (
-                    wu["user"]["last_chosen"]
-                    or "1900-01-01",  # Never selected = oldest
+                    wu["last_selected"] or "1900-01-01",  # Never selected = oldest
                     wu["user"]["mail"],  # Alphabetical as final tie-breaker
                 ),
             )
@@ -705,7 +723,7 @@ def add_tie_breaking_logic(weighted_users: List[Dict]) -> List[Dict]:
 
 def calculate_user_weight(
     user_id: int,
-    last_chosen: Optional[str],
+    last_selected: Optional[str],
     last_working_day_catcher_id: Optional[int],
     recent_selections: int,
     total_selections: int,
@@ -717,7 +735,7 @@ def calculate_user_weight(
 
     Args:
         user_id: User ID
-        last_chosen: Last chosen date (ISO format) or None
+        last_selected: Last selected date (ISO format) or None
         last_working_day_catcher_id: User ID of the last working day's catcher
         recent_selections: Number of recent selections
         total_selections: Total number of selections (all time)
@@ -730,9 +748,9 @@ def calculate_user_weight(
     weight = BASE_WEIGHT
 
     # Add weight based on days since last selection (non-linear growth)
-    if last_chosen:
+    if last_selected:
         try:
-            last_date = datetime.datetime.strptime(last_chosen, "%Y-%m-%d").date()
+            last_date = datetime.datetime.strptime(last_selected, "%Y-%m-%d").date()
             days_since = (datetime.date.today() - last_date).days
             # Use square root for gradual acceleration, then square for stronger acceleration after 10 days
             if days_since <= 10:
@@ -812,7 +830,7 @@ def find_next_catcher(
                     SELECT u.mail 
                     FROM user u
                     JOIN selection_history sh ON u.id = sh.user_id
-                    WHERE sh.selected_date = ? AND u.tenant_id = ?
+                    WHERE sh.selected_date = ? AND sh.tenant_id = ?
                 """,
                     (today, tenant_id),
                 )
@@ -839,7 +857,7 @@ def find_next_catcher(
             if tenant_id:
                 cur.execute(
                     """
-                    SELECT id, mail, last_chosen
+                    SELECT id, mail
                     FROM user 
                     WHERE weekdays LIKE ? AND tenant_id = ?
                 """,
@@ -848,7 +866,7 @@ def find_next_catcher(
             else:
                 cur.execute(
                     """
-                    SELECT id, mail, last_chosen
+                    SELECT id, mail
                     FROM user 
                     WHERE weekdays LIKE ?
                 """,
@@ -883,12 +901,31 @@ def find_next_catcher(
 
             # Get total selection counts for balance calculation
             total_selections_map = {}
+            last_selected_map = {}
             for user in available_users:
-                cur.execute(
-                    "SELECT COUNT(*) FROM selection_history WHERE user_id = ?",
-                    (user["id"],),
-                )
+                if tenant_id:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM selection_history WHERE user_id = ? AND tenant_id = ?",
+                        (user["id"], tenant_id),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM selection_history WHERE user_id = ?",
+                        (user["id"],),
+                    )
                 total_selections_map[user["id"]] = cur.fetchone()[0]
+
+                if tenant_id:
+                    cur.execute(
+                        "SELECT MAX(selected_date) FROM selection_history WHERE user_id = ? AND tenant_id = ?",
+                        (user["id"], tenant_id),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT MAX(selected_date) FROM selection_history WHERE user_id = ?",
+                        (user["id"],),
+                    )
+                last_selected_map[user["id"]] = cur.fetchone()[0]
 
             # Calculate average total selections
             avg_total_selections = (
@@ -898,11 +935,14 @@ def find_next_catcher(
             )
 
             for user in available_users:
-                recent_selections = get_recent_selection_count(conn, user["id"])
+                recent_selections = get_recent_selection_count(
+                    conn, user["id"], tenant_id
+                )
                 total_selections = total_selections_map[user["id"]]
+                last_selected = last_selected_map[user["id"]]
                 weight = calculate_user_weight(
                     user["id"],
-                    user["last_chosen"],
+                    last_selected,
                     last_working_day_catcher_id,
                     recent_selections,
                     total_selections,
@@ -916,6 +956,7 @@ def find_next_catcher(
                         "weight": weight,
                         "recent_selections": recent_selections,
                         "total_selections": total_selections,
+                        "last_selected": last_selected,
                         "is_yesterday": user["id"] == last_working_day_catcher_id,
                     }
                 )
@@ -948,7 +989,7 @@ def find_next_catcher(
                     logging.info(
                         f"  {user['mail']}: weight={wu['weight']:.3f}, "
                         f"probability={probability:.1f}%, "
-                        f"last_chosen={user['last_chosen']}, "
+                        f"last_selected={wu['last_selected']}, "
                         f"recent_selections={wu['recent_selections']}, "
                         f"total_selections={wu['total_selections']}, "
                         f"is_last_working_day={wu['is_yesterday']}{tie_info}"
@@ -969,14 +1010,8 @@ def find_next_catcher(
             else:
                 # Record the selection in history
                 cur.execute(
-                    "INSERT INTO selection_history (user_id, selected_date) VALUES (?, ?)",
-                    (selected_user["id"], today),
-                )
-
-                # Update the last_chosen date for backward compatibility
-                cur.execute(
-                    "UPDATE user SET last_chosen = ? WHERE id = ?",
-                    (today, selected_user["id"]),
+                    "INSERT INTO selection_history (user_id, selected_date, tenant_id) VALUES (?, ?, ?)",
+                    (selected_user["id"], today, tenant_id),
                 )
 
                 conn.commit()

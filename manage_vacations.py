@@ -59,9 +59,12 @@ def list_users():
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT u.id, u.mail, u.weekdays, u.last_chosen, t.name as tenant_name
+                SELECT u.id, u.mail, u.weekdays, t.name as tenant_name,
+                       MAX(sh.selected_date) as last_selected
                 FROM user u
                 LEFT JOIN tenants t ON u.tenant_id = t.id
+                LEFT JOIN selection_history sh ON u.id = sh.user_id AND sh.tenant_id = u.tenant_id
+                GROUP BY u.id
                 ORDER BY u.mail
                 """
             )
@@ -74,14 +77,14 @@ def list_users():
             print("\nUsers:")
             print("-" * 95)
             print(
-                f"{'ID':<5} {'Email':<30} {'Tenant':<20} {'Weekdays':<10} {'Last Chosen':<12}"
+                f"{'ID':<5} {'Email':<30} {'Tenant':<20} {'Weekdays':<10} {'Last Selected':<12}"
             )
             print("-" * 95)
 
             for user in users:
                 tenant_name = user["tenant_name"] or "No Tenant"
                 print(
-                    f"{user['id']:<5} {user['mail']:<30} {tenant_name:<20} {user['weekdays']:<10} {user['last_chosen'] or 'Never':<12}"
+                    f"{user['id']:<5} {user['mail']:<30} {tenant_name:<20} {user['weekdays']:<10} {user['last_selected'] or 'Never':<12}"
                 )
     except sqlite3.Error as e:
         logging.error(f"Error listing users: {e}")
@@ -324,7 +327,15 @@ def check_vacation_overlap(
                     (start_date >= ? AND end_date <= ?)
                 )
             """,
-                (user_id, end_date, start_date, end_date, start_date, start_date, end_date),
+                (
+                    user_id,
+                    end_date,
+                    start_date,
+                    end_date,
+                    start_date,
+                    start_date,
+                    end_date,
+                ),
             )
             overlapping = cursor.fetchall()
 
@@ -336,7 +347,10 @@ def check_vacation_overlap(
                     else:
                         dates.append(f"{v['start_date']} to {v['end_date']}")
                 noun = "vacation" if len(dates) == 1 else "vacations"
-                return True, f"This vacation overlaps with your existing {noun}: {', '.join(dates)}"
+                return (
+                    True,
+                    f"This vacation overlaps with your existing {noun}: {', '.join(dates)}",
+                )
 
             return False, ""
     except Exception as e:
@@ -374,7 +388,10 @@ def check_duplicate_vacation(
             if result["count"] > 0:
                 if start_date == end_date:
                     return True, f"You already have a vacation on {start_date}"
-                return True, f"You already have a vacation from {start_date} to {end_date}"
+                return (
+                    True,
+                    f"You already have a vacation from {start_date} to {end_date}",
+                )
 
             return False, ""
     except Exception as e:
