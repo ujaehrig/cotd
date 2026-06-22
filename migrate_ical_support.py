@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def migrate_database(db_path: str = None) -> None:
+def migrate_database(db_path: str | None = None) -> None:
     """
     Migrate database to support iCal vacation sync.
 

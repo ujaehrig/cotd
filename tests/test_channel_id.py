@@ -68,10 +68,12 @@ def db(tmp_path):
 class TestTenantChannelId:
     def test_get_tenant_by_name_includes_channel_id(self, db):
         tenant = get_tenant_by_name(db, "Team Alpha")
+        assert tenant is not None
         assert tenant["slack_channel_id"] == "C12345"
 
     def test_get_tenant_by_name_channel_id_null(self, db):
         tenant = get_tenant_by_name(db, "Team Beta")
+        assert tenant is not None
         assert tenant["slack_channel_id"] is None
 
     def test_get_active_tenants_includes_channel_id(self, db):
@@ -118,6 +120,7 @@ class TestProcessTenantChannelId:
         self, mock_holiday, mock_weekend, mock_trigger, db
     ):
         tenant = get_tenant_by_name(db, "Team Beta")
+        assert tenant is not None
         process_tenant(db, tenant)
         mock_trigger.assert_not_called()
 
@@ -128,6 +131,7 @@ class TestProcessTenantChannelId:
         self, mock_holiday, mock_weekend, mock_trigger, db
     ):
         tenant = get_tenant_by_name(db, "Team Alpha")
+        assert tenant is not None
         process_tenant(db, tenant)
         mock_trigger.assert_called_once()
         call_kwargs = mock_trigger.call_args.kwargs

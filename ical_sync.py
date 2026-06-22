@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class ICalParser:
     """Fetches and parses iCal/ICS calendar feeds."""
 
-    def __init__(self, timeout: int = None):
+    def __init__(self, timeout: int | None = None):
         """
         Initialize the iCal parser.
 
@@ -60,7 +60,7 @@ class ICalParser:
             logger.error(f"Error fetching calendar from {safe_url}: {e}")
             return None
 
-    def extract_events(self, calendar: Calendar, start_date: date = None) -> List[Dict]:
+    def extract_events(self, calendar: Calendar, start_date: date | None = None) -> List[Dict]:
         """
         Extract vacation events from calendar.
 
