@@ -1,6 +1,6 @@
 [project]
 name = "cotd"
-version = "0.1.0"
+version = "1.2.0"
 description = "Catcher of the Day - Slack-based daily catcher selection"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -17,6 +17,7 @@ dev = [
     "flask>=3.1.3",
     "pytest>=9.0.2",
     "pytest-cov>=7.1.0",
+    "ty>=0.0.55",
 ]
 
 [tool.pytest.ini_options]

@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 class VacationSync:
     """Orchestrates vacation synchronization from iCal feeds."""
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize vacation sync.
 

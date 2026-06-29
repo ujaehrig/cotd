@@ -7,7 +7,7 @@ from pathlib import Path
 DATABASE_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent / "user.db"))
 
 
-def get_db_connection(db_path: str = None) -> sqlite3.Connection:
+def get_db_connection(db_path: str | None = None) -> sqlite3.Connection:
     """
     Create and return a database connection with Row factory.
 

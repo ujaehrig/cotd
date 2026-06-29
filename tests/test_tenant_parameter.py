@@ -129,6 +129,7 @@ def test_process_tenant_returns_success(test_db_with_tenants):
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "Team Alpha")
+    assert tenant is not None
 
     # Mock external dependencies
     with (
@@ -157,6 +158,7 @@ def test_process_tenant_handles_weekend(test_db_with_tenants):
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "Team Alpha")
+    assert tenant is not None
 
     with patch("catcher.is_weekend", return_value=True):
         from catcher import process_tenant
@@ -176,6 +178,7 @@ def test_process_tenant_handles_errors(test_db_with_tenants):
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "Team Alpha")
+    assert tenant is not None
 
     with patch("catcher.is_weekend", side_effect=Exception("Test error")):
         from catcher import process_tenant

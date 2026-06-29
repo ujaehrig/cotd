@@ -304,7 +304,7 @@ def is_weekend() -> bool:
     return datetime.datetime.now().weekday() >= 5  # 5 = Saturday, 6 = Sunday
 
 
-def is_holiday(location: str = None) -> bool:
+def is_holiday(location: str | None = None) -> bool:
     """
     Check if today is a public holiday in Germany.
     First tries the web service API, then falls back to the holidays library.
@@ -339,7 +339,7 @@ def is_holiday(location: str = None) -> bool:
     # Fallback to holidays library
     try:
         # Create holidays object for Germany with specified subdivision
-        german_holidays = holidays.Germany(subdiv=location)
+        german_holidays = holidays.country_holidays("DE", subdiv=location)
         today = datetime.date.today()
 
         if today in german_holidays:
@@ -506,7 +506,7 @@ def is_user_on_vacation(conn: sqlite3.Connection, user_id: int, date: str) -> bo
 
 
 def get_last_working_day_catcher(
-    conn: sqlite3.Connection, tenant_id: int = None
+    conn: sqlite3.Connection, tenant_id: int | None = None
 ) -> Optional[int]:
     """
     Get the user ID of the last working day's catcher (skipping weekends and holidays).
@@ -532,7 +532,7 @@ def get_last_working_day_catcher(
             # Check if it was a holiday
             try:
                 # Check with holidays library
-                german_holidays = holidays.Germany(subdiv=HOLIDAY_REGION)
+                german_holidays = holidays.country_holidays("DE", subdiv=HOLIDAY_REGION)
                 if check_date in german_holidays:
                     continue
             except Exception:
@@ -573,7 +573,7 @@ def get_last_working_day_catcher(
 def get_recent_selection_count(
     conn: sqlite3.Connection,
     user_id: int,
-    tenant_id: int = None,
+    tenant_id: int | None = None,
     days: int = LOOKBACK_DAYS,
 ) -> int:
     """
@@ -790,8 +790,8 @@ def calculate_user_weight(
 
 
 def find_next_catcher(
-    conn: sqlite3.Connection = None,
-    tenant_id: int = None,
+    conn: sqlite3.Connection | None = None,
+    tenant_id: int | None = None,
     dry_run: bool = False,
     debug_weights: bool = False,
 ) -> Tuple[Optional[str], bool]:

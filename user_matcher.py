@@ -12,14 +12,14 @@ User matching module for fuzzy matching calendar event names to users.
 
 import os
 import re
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Sequence
 from rapidfuzz import fuzz
 
 
 class UserMatcher:
     """Matches names from calendar events to users using fuzzy matching."""
 
-    def __init__(self, threshold: int = None):
+    def __init__(self, threshold: int | None = None):
         """
         Initialize the user matcher.
 
@@ -61,7 +61,7 @@ class UserMatcher:
     def match_user(
         self,
         event_title: str,
-        users: List[Tuple[int, str, Optional[str]]]
+        users: Sequence[Tuple[int, str, Optional[str]]]
     ) -> Optional[int]:
         """
         Match event title to a user.

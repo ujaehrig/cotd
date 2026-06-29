@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def migrate_database(db_path: str = None) -> None:
+def migrate_database(db_path: str | None = None) -> None:
     """Add UNIQUE(user_id, ical_event_uid) to vacation table."""
     if db_path is None:
         from db import DATABASE_PATH
