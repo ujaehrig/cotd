@@ -10,24 +10,27 @@
 # ]
 # ///
 
-import os
-import sys
-import json
-import hmac
-import hashlib
-import requests
-import sqlite3
-import logging
-import time
-import datetime
-import holidays
 import argparse
+import datetime
+import hashlib
+import hmac
+import json
+import logging
+import os
 import random
-from typing import Optional, Dict, Tuple, List
+import sqlite3
+import sys
+import time
 from pathlib import Path
+
+import holidays
+import requests
 from dotenv import load_dotenv
-from db import DATABASE_PATH, get_db_connection
+
 from cleanup import cleanup_old_selection_history, cleanup_old_takeover_log
+from db import DATABASE_PATH, get_db_connection
+
+logger = logging.getLogger(__name__)
 
 # Import vacation sync
 try:
@@ -36,7 +39,7 @@ try:
     VACATION_SYNC_AVAILABLE = True
 except ImportError:
     VACATION_SYNC_AVAILABLE = False
-    logging.warning("vacation_sync module not available, iCal sync disabled")
+    logger.warning("vacation_sync module not available, iCal sync disabled")
 
 
 # Load environment variables from .env file
@@ -106,6 +109,8 @@ CLEANUP_PROBABILITY = 0.1  # 10% chance of running cleanup each day
 VACATION_RETENTION_DAYS = int(
     os.environ.get("VACATION_RETENTION_DAYS", "90")
 )  # Keep 90 days of past vacations
+LOOKAHEAD_DAYS = 7  # Days to look ahead for upcoming vacation
+VACATION_LOOKAHEAD_BONUS = 5  # Bonus per missed working day in lookahead window
 
 
 def cleanup_old_vacations(conn: sqlite3.Connection, dry_run: bool = False) -> None:
@@ -117,7 +122,10 @@ def cleanup_old_vacations(conn: sqlite3.Connection, dry_run: bool = False) -> No
         dry_run: If True, only log what would be deleted
     """
     cutoff_date = (
-        (datetime.datetime.now() - datetime.timedelta(days=VACATION_RETENTION_DAYS))
+        (
+            datetime.datetime.now(tz=datetime.UTC)
+            - datetime.timedelta(days=VACATION_RETENTION_DAYS)
+        )
         .date()
         .isoformat()
     )
@@ -128,16 +136,16 @@ def cleanup_old_vacations(conn: sqlite3.Connection, dry_run: bool = False) -> No
 
     if count > 0:
         if dry_run:
-            logging.info(
+            logger.info(
                 f"[DRY RUN] Would delete {count} vacation entries older than {cutoff_date}"
             )
         else:
             cursor.execute("DELETE FROM vacation WHERE end_date < ?", (cutoff_date,))
             conn.commit()
-            logging.info(f"Deleted {count} vacation entries older than {cutoff_date}")
+            logger.info(f"Deleted {count} vacation entries older than {cutoff_date}")
 
 
-def get_tenant_by_name(conn: sqlite3.Connection, name: str) -> Optional[Dict]:
+def get_tenant_by_name(conn: sqlite3.Connection, name: str) -> dict | None:
     """
     Get tenant by name.
 
@@ -167,7 +175,7 @@ def get_tenant_by_name(conn: sqlite3.Connection, name: str) -> Optional[Dict]:
     return None
 
 
-def get_active_tenants(conn: sqlite3.Connection) -> List[Dict]:
+def get_active_tenants(conn: sqlite3.Connection) -> list[dict]:
     """
     Get all active tenants.
 
@@ -199,7 +207,7 @@ def get_active_tenants(conn: sqlite3.Connection) -> List[Dict]:
 
 def process_tenant(
     conn: sqlite3.Connection,
-    tenant: Dict,
+    tenant: dict,
     dry_run: bool = False,
     debug_weights: bool = False,
     force_notify: bool = False,
@@ -218,30 +226,30 @@ def process_tenant(
         True if successful, False otherwise
     """
     try:
-        logging.info(f"[{tenant['name']}] Starting selection...")
+        logger.info(f"[{tenant['name']}] Starting selection...")
 
         # Sync vacations from iCal if configured
         if VACATION_SYNC_AVAILABLE and tenant.get("ical_url"):
-            logging.info(f"[{tenant['name']}] Syncing vacations from iCal...")
+            logger.info(f"[{tenant['name']}] Syncing vacations from iCal...")
             try:
                 sync = VacationSync()
                 success, msg = sync.sync_tenant_vacations(
                     tenant["id"], tenant["name"], tenant["ical_url"]
                 )
                 if success:
-                    logging.info(f"[{tenant['name']}] {msg}")
+                    logger.info(f"[{tenant['name']}] {msg}")
                 else:
-                    logging.warning(f"[{tenant['name']}] {msg}")
-            except Exception as e:
-                logging.error(f"[{tenant['name']}] iCal sync failed: {e}")
+                    logger.warning(f"[{tenant['name']}] {msg}")
+            except (OSError, ValueError) as e:
+                logger.error(f"[{tenant['name']}] iCal sync failed: {e}")
 
         # Check if today is a non-working day
         if is_weekend():
-            logging.info(f"[{tenant['name']}] Today is a weekend, no catcher needed")
+            logger.info(f"[{tenant['name']}] Today is a weekend, no catcher needed")
             return True
 
         if is_holiday(tenant["location"]):
-            logging.info(f"[{tenant['name']}] Today is a holiday, no catcher needed")
+            logger.info(f"[{tenant['name']}] Today is a holiday, no catcher needed")
             return True
 
         # Find next catcher using weighted algorithm
@@ -256,7 +264,7 @@ def process_tenant(
             if is_new_selection or force_notify:
                 # Skip notification if slack_channel_id is not configured
                 if not tenant.get("slack_channel_id"):
-                    logging.error(
+                    logger.error(
                         f"[{tenant['name']}] No slack_channel_id configured, skipping notification"
                     )
                     return False
@@ -273,24 +281,22 @@ def process_tenant(
                     dry_run=dry_run,
                 )
                 if success:
-                    logging.info(
+                    logger.info(
                         f"[{tenant['name']}] Successfully notified catcher: {mail}"
                     )
                 else:
-                    logging.error(
-                        f"[{tenant['name']}] Failed to notify catcher: {mail}"
-                    )
+                    logger.error(f"[{tenant['name']}] Failed to notify catcher: {mail}")
             else:
-                logging.info(
+                logger.info(
                     f"[{tenant['name']}] Using previously selected catcher: {mail}"
                 )
             return True
         else:
-            logging.warning(f"[{tenant['name']}] No catcher found for today")
+            logger.warning(f"[{tenant['name']}] No catcher found for today")
             return False
 
-    except Exception as e:
-        logging.error(f"[{tenant['name']}] Error processing tenant: {e}", exc_info=True)
+    except Exception:
+        logger.exception(f"[{tenant['name']}] Error processing tenant")
         return False
 
 
@@ -301,7 +307,9 @@ def is_weekend() -> bool:
     Returns:
         bool: True if today is a weekend, False otherwise
     """
-    return datetime.datetime.now().weekday() >= 5  # 5 = Saturday, 6 = Sunday
+    return (
+        datetime.datetime.now(tz=datetime.UTC).weekday() >= 5
+    )  # 5 = Saturday, 6 = Sunday
 
 
 def is_holiday(location: str | None = None) -> bool:
@@ -323,36 +331,36 @@ def is_holiday(location: str | None = None) -> bool:
         url = f"{HOLIDAY_API_BASE_URL}?countyCode=DE-{location}"
         response = requests.get(url, timeout=HOLIDAY_TIMEOUT)
         if response.status_code == 200:
-            logging.info("Holiday detected via web service")
+            logger.info("Holiday detected via web service")
             return True
         elif response.status_code == 204:
             # 204 typically means "no holiday today"
-            logging.debug("No holiday today (web service)")
+            logger.debug("No holiday today (web service)")
             return False
         else:
-            logging.warning(
+            logger.warning(
                 f"Web service returned unexpected status: {response.status_code}"
             )
     except requests.exceptions.RequestException as e:
-        logging.warning(f"Web service failed, falling back to holidays library: {e}")
+        logger.warning(f"Web service failed, falling back to holidays library: {e}")
 
     # Fallback to holidays library
     try:
         # Create holidays object for Germany with specified subdivision
         german_holidays = holidays.country_holidays("DE", subdiv=location)
-        today = datetime.date.today()
+        today = datetime.datetime.now(tz=datetime.UTC).date()
 
         if today in german_holidays:
             holiday_name = german_holidays.get(today)
-            logging.info(
+            logger.info(
                 f"Holiday detected via fallback library ({location}): {holiday_name}"
             )
             return True
         else:
-            logging.debug(f"No holiday today (fallback library, {location})")
+            logger.debug(f"No holiday today (fallback library, {location})")
             return False
-    except Exception as e:
-        logging.error(f"Both holiday checking methods failed: {e}")
+    except (ValueError, KeyError) as e:
+        logger.error(f"Both holiday checking methods failed: {e}")
         # When in doubt, assume it's not a holiday to avoid missing work days
         return False
 
@@ -369,13 +377,13 @@ def generate_registration_url(tenant_id: int, takeover_secret: str) -> str:
         Registration URL string, or empty string if not configured
     """
     if not TAKEOVER_BASE_URL or not takeover_secret:
-        logging.debug(
+        logger.debug(
             "No registration URL generated (TAKEOVER_BASE_URL=%s, secret=%s)",
             "set" if TAKEOVER_BASE_URL else "missing",
             "set" if takeover_secret else "missing",
         )
         return ""
-    today = datetime.date.today().isoformat()
+    today = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
     msg = f"{tenant_id}{today}".encode()
     nonce = hmac.new(takeover_secret.encode(), msg, hashlib.sha256).hexdigest()
     return f"{TAKEOVER_BASE_URL}/takeover?tenant={tenant_id}&nonce={nonce}"
@@ -404,22 +412,22 @@ def trigger_slack(
         bool: True if notification was successful (or skipped in dry-run), False otherwise
     """
     if not mail:
-        logging.error("Cannot trigger Slack notification: mail is None")
+        logger.error("Cannot trigger Slack notification: mail is None")
         return False
 
     if dry_run:
-        logging.info(f"[DRY RUN] Would send Slack notification to: {mail}")
+        logger.info(f"[DRY RUN] Would send Slack notification to: {mail}")
         return True
 
-    data: Dict[str, str] = {
+    data: dict[str, str] = {
         "uid": mail,
         "registration_url": registration_url,
         "channel_id": channel_id,
     }
-    headers: Dict[str, str] = {"Content-type": "application/json"}
+    headers: dict[str, str] = {"Content-type": "application/json"}
 
     if not webhook_url:
-        logging.error("No webhook URL configured for tenant")
+        logger.error("No webhook URL configured for tenant")
         return False
 
     for attempt in range(max_retries):
@@ -434,23 +442,23 @@ def trigger_slack(
                 timeout=SLACK_TIMEOUT,
             )
             if response.status_code == 200:
-                logging.info(f"Slack notification sent successfully for: {mail}")
+                logger.info(f"Slack notification sent successfully for: {mail}")
                 return True
             elif 500 <= response.status_code < 600:
                 # Retry on server errors (5xx)
                 retry_num = attempt + 1
                 if retry_num < max_retries:
-                    logging.warning(
+                    logger.warning(
                         f"Server error {response.status_code}. Retrying ({retry_num}/{max_retries}) in {retry_delay} seconds..."
                     )
                     time.sleep(retry_delay)
                 else:
-                    logging.error(
+                    logger.error(
                         f"Slack notification failed after {max_retries} attempts: Server error {response.status_code}"
                     )
                     return False
             else:
-                logging.warning(
+                logger.warning(
                     f"Webhook returned: {response.status_code} ({response.text})"
                 )
                 # Don't retry for other non-5xx errors
@@ -458,17 +466,17 @@ def trigger_slack(
         except requests.exceptions.Timeout:
             retry_num = attempt + 1
             if retry_num < max_retries:
-                logging.warning(
+                logger.warning(
                     f"Slack notification timed out. Retrying ({retry_num}/{max_retries}) in {retry_delay} seconds..."
                 )
                 time.sleep(retry_delay)
             else:
-                logging.error(
+                logger.error(
                     f"Slack notification failed after {max_retries} attempts: Timeout"
                 )
                 return False
         except requests.exceptions.RequestException as e:
-            logging.error(f"Failed to trigger Slack notification: {e}")
+            logger.error(f"Failed to trigger Slack notification: {e}")
             return False
 
     return False
@@ -501,13 +509,94 @@ def is_user_on_vacation(conn: sqlite3.Connection, user_id: int, date: str) -> bo
         count = cursor.fetchone()[0]
         return count > 0
     except sqlite3.Error as e:
-        logging.error(f"Error checking vacation status: {e}")
+        logger.error(f"Error checking vacation status: {e}")
         return False
+
+
+def get_upcoming_vacation_working_days(
+    conn: sqlite3.Connection,
+    user_id: int,
+    lookahead_days: int = LOOKAHEAD_DAYS,
+) -> int:
+    """
+    Count working days a user will miss due to vacation in the lookahead window.
+
+    Looks from tomorrow through today + lookahead_days. Only counts weekdays
+    (Mon-Fri) that are not public holidays. Both manual and iCal vacation
+    entries are treated equally.
+
+    Args:
+        conn: Database connection
+        user_id: User ID to check
+        lookahead_days: Number of calendar days to look ahead (default: LOOKAHEAD_DAYS)
+
+    Returns:
+        int: Number of working days the user will be on vacation
+    """
+    try:
+        today = datetime.datetime.now(tz=datetime.UTC).date()
+        start = today + datetime.timedelta(days=1)  # Tomorrow
+        end = today + datetime.timedelta(days=lookahead_days)
+
+        # Query vacation entries that overlap with the lookahead window
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT start_date, end_date
+            FROM vacation
+            WHERE user_id = ?
+              AND end_date >= ?
+              AND start_date <= ?
+            """,
+            (user_id, start.isoformat(), end.isoformat()),
+        )
+        rows = cursor.fetchall()
+
+        if not rows:
+            return 0
+
+        # Collect all vacation dates within the window
+        vacation_dates: set[datetime.date] = set()
+        for row in rows:
+            vac_start = datetime.date.fromisoformat(row[0])
+            vac_end = datetime.date.fromisoformat(row[1])
+            # Clamp to the lookahead window
+            effective_start = max(vac_start, start)
+            effective_end = min(vac_end, end)
+            current = effective_start
+            while current <= effective_end:
+                vacation_dates.add(current)
+                current += datetime.timedelta(days=1)
+
+        # Filter to working days only (exclude weekends and holidays)
+        try:
+            german_holidays = holidays.country_holidays("DE", subdiv=HOLIDAY_REGION)
+        except (ValueError, KeyError):
+            german_holidays = {}
+
+        working_days = 0
+        for d in vacation_dates:
+            # Skip weekends (5=Saturday, 6=Sunday)
+            if d.weekday() >= 5:
+                continue
+            # Skip holidays
+            if d in german_holidays:
+                continue
+            working_days += 1
+
+        return working_days
+
+    except sqlite3.Error as e:
+        logger.error(f"Error getting upcoming vacation days: {e}")
+        return 0
+    except (ValueError, TypeError) as e:
+        logger.error(f"Unexpected error in get_upcoming_vacation_working_days: {e}")
+        return 0
 
 
 def get_last_working_day_catcher(
     conn: sqlite3.Connection, tenant_id: int | None = None
-) -> Optional[int]:
+) -> int | None:
     """
     Get the user ID of the last working day's catcher (skipping weekends and holidays).
 
@@ -516,14 +605,16 @@ def get_last_working_day_catcher(
         tenant_id: Tenant ID to filter by
 
     Returns:
-        Optional[int]: User ID of the last working day's catcher, or None if no one was selected
+        int | None: User ID of the last working day's catcher, or None if no one was selected
     """
     try:
         cursor = conn.cursor()
 
         # Look back up to 7 days to find the last working day with a selection
         for days_back in range(1, 8):
-            check_date = datetime.date.today() - datetime.timedelta(days=days_back)
+            check_date = datetime.datetime.now(
+                tz=datetime.UTC
+            ).date() - datetime.timedelta(days=days_back)
 
             # Skip weekends
             if check_date.weekday() >= 5:  # Saturday or Sunday
@@ -535,9 +626,9 @@ def get_last_working_day_catcher(
                 german_holidays = holidays.country_holidays("DE", subdiv=HOLIDAY_REGION)
                 if check_date in german_holidays:
                     continue
-            except Exception:
+            except (ValueError, KeyError) as e:
                 # If holiday check fails, assume it wasn't a holiday
-                pass
+                logger.debug(f"Holiday check failed for {check_date}: {e}")
 
             # Check if someone was selected on this working day
             if tenant_id:
@@ -566,7 +657,7 @@ def get_last_working_day_catcher(
         # No catcher found in the last 7 working days
         return None
     except sqlite3.Error as e:
-        logging.error(f"Error getting last working day's catcher: {e}")
+        logger.error(f"Error getting last working day's catcher: {e}")
         return None
 
 
@@ -590,7 +681,8 @@ def get_recent_selection_count(
     """
     try:
         cutoff_date = (
-            datetime.date.today() - datetime.timedelta(days=days)
+            datetime.datetime.now(tz=datetime.UTC).date()
+            - datetime.timedelta(days=days)
         ).isoformat()
         cursor = conn.cursor()
         if tenant_id:
@@ -617,17 +709,17 @@ def get_recent_selection_count(
 
         return cursor.fetchone()[0]
     except sqlite3.Error as e:
-        logging.error(f"Error getting recent selection count: {e}")
+        logger.error(f"Error getting recent selection count: {e}")
         return 0
 
 
-def weighted_random_selection_improved(weighted_users: List[Dict]) -> Dict:
+def weighted_random_selection_improved(weighted_users: list[dict]) -> dict:
     """
     Improved weighted random selection using cumulative probability.
     More efficient than creating large selection pools.
 
     Args:
-        weighted_users: List of dicts with 'user' and 'weight' keys
+        weighted_users: list of dicts with 'user' and 'weight' keys
 
     Returns:
         Selected user dict
@@ -643,34 +735,34 @@ def weighted_random_selection_improved(weighted_users: List[Dict]) -> Dict:
 
     if total_weight <= 0:
         # All weights are zero or negative - fall back to random selection
-        logging.warning("All weights are zero or negative, using random selection")
+        logger.warning("All weights are zero or negative, using random selection")
         return random.choice(weighted_users)["user"]
 
     # Generate random number between 0 and total_weight (exclusive)
     rand_val = random.random() * total_weight
 
     # Debug logging
-    logging.debug(f"Random value: {rand_val:.3f}, Total weight: {total_weight:.3f}")
+    logger.debug(f"Random value: {rand_val:.3f}, Total weight: {total_weight:.3f}")
 
     # Find the user corresponding to this random value
     cumulative = 0
     for i, wu in enumerate(weighted_users):
         cumulative += wu["weight"]
-        logging.debug(
+        logger.debug(
             f"User {i}: {wu['user']['mail']}, weight: {wu['weight']:.3f}, cumulative: {cumulative:.3f}"
         )
         if rand_val < cumulative:
-            logging.debug(
+            logger.debug(
                 f"Selected user {wu['user']['mail']} (rand_val {rand_val:.3f} < cumulative {cumulative:.3f})"
             )
             return wu["user"]
 
     # Fallback (shouldn't happen due to floating point precision)
-    logging.warning("Fallback selection used - this shouldn't happen")
+    logger.warning("Fallback selection used - this shouldn't happen")
     return weighted_users[-1]["user"]
 
 
-def add_tie_breaking_logic(weighted_users: List[Dict]) -> List[Dict]:
+def add_tie_breaking_logic(weighted_users: list[dict]) -> list[dict]:
     """
     Add tie-breaking logic for users with equal weights.
 
@@ -695,7 +787,7 @@ def add_tie_breaking_logic(weighted_users: List[Dict]) -> List[Dict]:
 
     # Apply tie-breaking within each weight group
     result = []
-    for weight, users in weight_groups.items():
+    for users in weight_groups.values():
         if len(users) == 1:
             # No tie to break
             result.extend(users)
@@ -723,12 +815,13 @@ def add_tie_breaking_logic(weighted_users: List[Dict]) -> List[Dict]:
 
 def calculate_user_weight(
     user_id: int,
-    last_selected: Optional[str],
-    last_working_day_catcher_id: Optional[int],
+    last_selected: str | None,
+    last_working_day_catcher_id: int | None,
     recent_selections: int,
     total_selections: int,
     avg_total_selections: float,
     has_alternatives: bool,
+    upcoming_vacation_days: int = 0,
 ) -> float:
     """
     Calculate the selection weight for a user.
@@ -741,6 +834,7 @@ def calculate_user_weight(
         total_selections: Total number of selections (all time)
         avg_total_selections: Average total selections across all users
         has_alternatives: Whether there are other available users
+        upcoming_vacation_days: Working days of upcoming vacation in lookahead window
 
     Returns:
         float: Calculated weight for selection
@@ -750,8 +844,10 @@ def calculate_user_weight(
     # Add weight based on days since last selection (non-linear growth)
     if last_selected:
         try:
-            last_date = datetime.datetime.strptime(last_selected, "%Y-%m-%d").date()
-            days_since = (datetime.date.today() - last_date).days
+            last_date = datetime.date.fromisoformat(last_selected)
+            days_since = (
+                datetime.datetime.now(tz=datetime.UTC).date() - last_date
+            ).days
             # Use square root for gradual acceleration, then square for stronger acceleration after 10 days
             if days_since <= 10:
                 weight += days_since**1.2  # Slight acceleration
@@ -766,11 +862,21 @@ def calculate_user_weight(
         # Never selected - give high bonus
         weight += 500
 
+    # Apply vacation lookahead bonus (before consecutive-day penalty so it
+    # gets crushed along with everything else if the user was yesterday's catcher)
+    if upcoming_vacation_days > 0:
+        vacation_bonus = upcoming_vacation_days * VACATION_LOOKAHEAD_BONUS
+        weight += vacation_bonus
+        logger.debug(
+            f"Applied vacation lookahead bonus to user {user_id}: "
+            f"+{vacation_bonus:.1f} ({upcoming_vacation_days} working days)"
+        )
+
     # Apply penalty for being selected on the last working day (only if alternatives exist)
     if has_alternatives and last_working_day_catcher_id == user_id:
         # Make the penalty much more aggressive - reduce weight to a very small fraction
         weight = max(weight * 0.1, 1)  # Reduce to 10% of original weight, minimum 1
-        logging.debug(
+        logger.debug(
             f"Applied consecutive day penalty to user {user_id}: weight reduced to {weight:.3f}"
         )
 
@@ -794,7 +900,7 @@ def find_next_catcher(
     tenant_id: int | None = None,
     dry_run: bool = False,
     debug_weights: bool = False,
-) -> Tuple[Optional[str], bool]:
+) -> tuple[str | None, bool]:
     """
     Find the next available user using weighted selection algorithm.
 
@@ -805,7 +911,7 @@ def find_next_catcher(
         debug_weights: If True, show weight calculations for all users
 
     Returns:
-        Tuple[Optional[str], bool]: A tuple containing:
+        tuple[str | None, bool]: A tuple containing:
             - The email address of the next available user or None
             - Boolean indicating if a new user was selected (True) or if we're using a previously selected user (False)
     """
@@ -821,7 +927,7 @@ def find_next_catcher(
 
         try:
             cur = conn.cursor()
-            today = datetime.date.today().isoformat()
+            today = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
 
             # Check if someone is already chosen for today (filtered by tenant)
             if tenant_id:
@@ -847,11 +953,11 @@ def find_next_catcher(
 
             result = cur.fetchone()
             if result is not None:
-                logging.info(f"User {result['mail']} was already selected for today")
+                logger.info(f"User {result['mail']} was already selected for today")
                 return result["mail"], False
 
             # Get current weekday (strftime %w: 0=Sunday, 1=Monday, ..., 6=Saturday)
-            weekday = datetime.datetime.now().strftime("%w")
+            weekday = datetime.datetime.now(tz=datetime.UTC).strftime("%w")
 
             # Get all users who are available on this weekday (filtered by tenant)
             if tenant_id:
@@ -882,7 +988,7 @@ def find_next_catcher(
                     available_users.append(user)
 
             if not available_users:
-                logging.warning(
+                logger.warning(
                     "No available users found for today (all on vacation or not scheduled)"
                 )
                 return None, False
@@ -940,6 +1046,9 @@ def find_next_catcher(
                 )
                 total_selections = total_selections_map[user["id"]]
                 last_selected = last_selected_map[user["id"]]
+                upcoming_vacation_days = get_upcoming_vacation_working_days(
+                    conn, user["id"]
+                )
                 weight = calculate_user_weight(
                     user["id"],
                     last_selected,
@@ -948,6 +1057,7 @@ def find_next_catcher(
                     total_selections,
                     avg_total_selections,
                     has_alternatives,
+                    upcoming_vacation_days,
                 )
 
                 weighted_users.append(
@@ -958,6 +1068,7 @@ def find_next_catcher(
                         "total_selections": total_selections,
                         "last_selected": last_selected,
                         "is_yesterday": user["id"] == last_working_day_catcher_id,
+                        "upcoming_vacation_days": upcoming_vacation_days,
                     }
                 )
 
@@ -969,7 +1080,7 @@ def find_next_catcher(
 
             if debug_weights:
                 total_weight = sum(wu["weight"] for wu in weighted_users)
-                logging.info(
+                logger.info(
                     "Weight calculations for all eligible users (after tie-breaking):"
                 )
                 for wu in weighted_users:
@@ -986,13 +1097,14 @@ def find_next_catcher(
                     probability = (
                         (wu["weight"] / total_weight) * 100 if total_weight > 0 else 0
                     )
-                    logging.info(
+                    logger.info(
                         f"  {user['mail']}: weight={wu['weight']:.3f}, "
                         f"probability={probability:.1f}%, "
                         f"last_selected={wu['last_selected']}, "
                         f"recent_selections={wu['recent_selections']}, "
                         f"total_selections={wu['total_selections']}, "
-                        f"is_last_working_day={wu['is_yesterday']}{tie_info}"
+                        f"is_last_working_day={wu['is_yesterday']}, "
+                        f"upcoming_vacation_days={wu.get('upcoming_vacation_days', 0)}{tie_info}"
                     )
 
             # Weighted random selection using improved algorithm
@@ -1004,7 +1116,7 @@ def find_next_catcher(
                     for wu in weighted_users
                     if wu["user"]["id"] == selected_user["id"]
                 )
-                logging.info(
+                logger.info(
                     f"[DRY RUN] Would select: {selected_user['mail']} (final weight: {selected_weight:.3f})"
                 )
             else:
@@ -1026,7 +1138,7 @@ def find_next_catcher(
                     for wu in weighted_users
                     if wu["user"]["id"] == selected_user["id"]
                 )
-                logging.info(
+                logger.info(
                     f"Selected new catcher: {selected_user['mail']} (final weight: {selected_weight:.3f})"
                 )
 
@@ -1037,7 +1149,7 @@ def find_next_catcher(
                 conn.close()
 
     except sqlite3.Error as e:
-        logging.error(f"Database error: {e}")
+        logger.error(f"Database error: {e}")
         return None, False
 
 
@@ -1050,7 +1162,7 @@ def main() -> None:
         args = parse_arguments()
 
         if args.dry_run:
-            logging.info(
+            logger.info(
                 "[DRY RUN] Running in dry-run mode - no database changes or notifications will be sent"
             )
 
@@ -1066,10 +1178,10 @@ def main() -> None:
                 # Process specific tenant
                 tenant = get_tenant_by_name(conn, args.tenant)
                 if not tenant:
-                    logging.error(f"Tenant '{args.tenant}' not found")
+                    logger.error(f"Tenant '{args.tenant}' not found")
                     sys.exit(1)
                 if not tenant["active"]:
-                    logging.error(f"Tenant '{args.tenant}' is inactive")
+                    logger.error(f"Tenant '{args.tenant}' is inactive")
                     sys.exit(1)
 
                 tenants_to_process = [tenant]
@@ -1077,10 +1189,10 @@ def main() -> None:
                 # Process all active tenants
                 tenants_to_process = get_active_tenants(conn)
                 if not tenants_to_process:
-                    logging.warning("No active tenants found")
+                    logger.warning("No active tenants found")
                     return
 
-                logging.info(f"Processing {len(tenants_to_process)} active tenants")
+                logger.info(f"Processing {len(tenants_to_process)} active tenants")
 
             # Process each tenant
             success_count = 0
@@ -1092,15 +1204,15 @@ def main() -> None:
 
             # Log summary for multiple tenants
             if len(tenants_to_process) > 1:
-                logging.info(
+                logger.info(
                     f"Completed {success_count}/{len(tenants_to_process)} tenants successfully"
                 )
 
         finally:
             conn.close()
 
-    except Exception as e:
-        logging.error(f"Unexpected error: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Unexpected error")
 
 
 if __name__ == "__main__":
