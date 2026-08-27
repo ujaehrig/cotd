@@ -1,25 +1,15 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "icalendar>=7.0.0",
-#    "requests>=2.25.0",
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
 """
 iCal parser module for fetching and parsing ICS calendar feeds.
 """
 
-import os
 import logging
-import requests
-from datetime import datetime, date
-from typing import List, Dict, Optional
+import os
+from datetime import UTC, date, datetime
 from urllib.parse import urlsplit, urlunsplit
-from icalendar import Calendar
+
+import requests
 from dotenv import load_dotenv
+from icalendar import Calendar
 
 load_dotenv()
 
@@ -40,7 +30,7 @@ class ICalParser:
             timeout = int(os.environ.get("ICAL_SYNC_TIMEOUT", "10"))
         self.timeout = timeout
 
-    def fetch_calendar(self, url: str) -> Optional[Calendar]:
+    def fetch_calendar(self, url: str) -> Calendar | None:
         """
         Fetch and parse iCal feed from URL.
 
@@ -54,13 +44,15 @@ class ICalParser:
             response = requests.get(url, timeout=self.timeout)
             response.raise_for_status()
             return Calendar.from_ical(response.content)
-        except Exception as e:
+        except (OSError, ValueError) as e:
             parts = urlsplit(url)
             safe_url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
             logger.error(f"Error fetching calendar from {safe_url}: {e}")
             return None
 
-    def extract_events(self, calendar: Calendar, start_date: date | None = None) -> List[Dict]:
+    def extract_events(
+        self, calendar: Calendar, start_date: date | None = None
+    ) -> list[dict]:
         """
         Extract vacation events from calendar.
 
@@ -72,7 +64,7 @@ class ICalParser:
             List of event dictionaries with keys: title, start_date, end_date, uid
         """
         if start_date is None:
-            start_date = date.today()
+            start_date = datetime.now(tz=UTC).date()
 
         events = []
         for component in calendar.walk():
@@ -124,7 +116,7 @@ class ICalParser:
                     {"title": title, "start_date": start, "end_date": end, "uid": uid}
                 )
 
-            except Exception as e:
+            except (ValueError, KeyError) as e:
                 logger.warning(f"Error parsing event: {e}")
                 continue
 

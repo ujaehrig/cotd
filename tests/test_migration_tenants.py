@@ -1,5 +1,3 @@
-#!/usr/bin/env -S uv run --script
-
 # /// script
 # dependencies = [
 #    "pytest>=7.0.0",
@@ -7,10 +5,11 @@
 # ]
 # ///
 
-import sqlite3
-import pytest
 import os
+import sqlite3
 from unittest.mock import patch
+
+import pytest
 
 
 @pytest.fixture
@@ -62,7 +61,7 @@ def test_migration_creates_tenants_table(temp_db):
     conn, db_path = temp_db
 
     # Import and run migration
-    from migrate_to_tenants import migrate_database
+    from cotd.migrations.migrate_to_tenants import migrate_database
 
     with patch.dict(
         os.environ,
@@ -80,7 +79,7 @@ def test_migration_creates_default_tenant(existing_user_db):
     """Test that migration creates default tenant 'Team Challengers'."""
     conn, db_path = existing_user_db
 
-    from migrate_to_tenants import migrate_database
+    from cotd.migrations.migrate_to_tenants import migrate_database
 
     with patch.dict(
         os.environ,
@@ -103,7 +102,7 @@ def test_migration_adds_tenant_id_column(existing_user_db):
     """Test that migration adds tenant_id column to user table."""
     conn, db_path = existing_user_db
 
-    from migrate_to_tenants import migrate_database
+    from cotd.migrations.migrate_to_tenants import migrate_database
 
     with patch.dict(
         os.environ,
@@ -120,7 +119,7 @@ def test_migration_assigns_users_to_default_tenant(existing_user_db):
     """Test that all existing users are assigned to default tenant."""
     conn, db_path = existing_user_db
 
-    from migrate_to_tenants import migrate_database
+    from cotd.migrations.migrate_to_tenants import migrate_database
 
     with patch.dict(
         os.environ,
@@ -148,7 +147,7 @@ def test_migration_preserves_user_data(existing_user_db):
     cursor = conn.execute("SELECT mail, weekdays FROM user ORDER BY mail")
     original_users = cursor.fetchall()
 
-    from migrate_to_tenants import migrate_database
+    from cotd.migrations.migrate_to_tenants import migrate_database
 
     with patch.dict(
         os.environ,
@@ -166,7 +165,7 @@ def test_migration_is_idempotent(existing_user_db):
     """Test that running migration twice doesn't cause errors."""
     conn, db_path = existing_user_db
 
-    from migrate_to_tenants import migrate_database
+    from cotd.migrations.migrate_to_tenants import migrate_database
 
     with patch.dict(
         os.environ,
@@ -193,7 +192,7 @@ def test_migration_handles_empty_database(temp_db):
     """Test that migration works on empty database."""
     conn, db_path = temp_db
 
-    from migrate_to_tenants import migrate_database
+    from cotd.migrations.migrate_to_tenants import migrate_database
 
     with patch.dict(
         os.environ,
@@ -218,7 +217,7 @@ def test_migration_uses_env_defaults(existing_user_db):
     """Test that migration uses environment variable defaults."""
     conn, db_path = existing_user_db
 
-    from migrate_to_tenants import migrate_database
+    from cotd.migrations.migrate_to_tenants import migrate_database
 
     with patch.dict(
         os.environ,
@@ -242,7 +241,7 @@ def test_migration_handles_missing_env_vars(existing_user_db):
     """Test that migration uses sensible defaults when env vars missing."""
     conn, db_path = existing_user_db
 
-    from migrate_to_tenants import migrate_database
+    from cotd.migrations.migrate_to_tenants import migrate_database
 
     with patch.dict(os.environ, {}, clear=True):
         migrate_database(str(db_path))

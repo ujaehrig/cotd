@@ -1,7 +1,8 @@
 """Tests for user_matcher.py - fuzzy matching calendar events to users."""
 
 import pytest
-from user_matcher import UserMatcher
+
+from cotd.sync.user_matcher import UserMatcher
 
 
 @pytest.fixture

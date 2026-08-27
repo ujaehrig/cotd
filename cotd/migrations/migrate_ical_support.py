@@ -1,13 +1,6 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
-import sqlite3
 import logging
+import sqlite3
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -34,7 +27,8 @@ def migrate_database(db_path: str | None = None) -> None:
         db_path: Path to database file. If None, uses DB_PATH env var or default.
     """
     if db_path is None:
-        from db import DATABASE_PATH
+        from cotd.db import DATABASE_PATH
+
         db_path = DATABASE_PATH
 
     logger.info(f"Starting iCal migration for database: {db_path}")

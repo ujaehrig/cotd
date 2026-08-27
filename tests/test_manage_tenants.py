@@ -1,16 +1,9 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "pytest>=7.0.0",
-# ]
-# ///
-
 import sqlite3
-import pytest
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture
@@ -43,9 +36,10 @@ def test_db(tmp_path):
 
 
 def run_manage_tenants(db_path, *args):
-    """Helper to run manage_tenants.py with arguments."""
+    """Helper to run manage_tenants CLI with arguments."""
     result = subprocess.run(
-        [sys.executable, "manage_tenants.py", "--db", str(db_path)] + list(args),
+        [sys.executable, "-m", "cotd.cli.manage_tenants", "--db", str(db_path)]
+        + list(args),
         capture_output=True,
         text=True,
     )

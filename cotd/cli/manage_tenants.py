@@ -1,27 +1,17 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "python-dotenv>=1.0.0",
-#    "icalendar>=7.0.0",
-#    "rapidfuzz>=3.0.0",
-#    "requests>=2.25.0",
-# ]
-# ///
-
-import sqlite3
 import argparse
-import sys
 import logging
+import sqlite3
+import sys
+
 from dotenv import load_dotenv
-from db import DATABASE_PATH, get_db_connection
+
+from cotd.db import DATABASE_PATH, get_db_connection
 
 load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 
@@ -38,15 +28,32 @@ def validate_url(url, field_name):
 
 
 VALID_LOCATIONS = {
-    "BW", "BY", "BE", "BB", "HB", "HH", "HE", "MV",
-    "NI", "NW", "RP", "SL", "SN", "ST", "SH", "TH",
+    "BW",
+    "BY",
+    "BE",
+    "BB",
+    "HB",
+    "HH",
+    "HE",
+    "MV",
+    "NI",
+    "NW",
+    "RP",
+    "SL",
+    "SN",
+    "ST",
+    "SH",
+    "TH",
 }
 
 
 def validate_location(location):
     """Validate location is a known German state code."""
     if location not in VALID_LOCATIONS:
-        print(f"Error: Invalid location '{location}'. Must be one of: {', '.join(sorted(VALID_LOCATIONS))}", file=sys.stderr)
+        print(
+            f"Error: Invalid location '{location}'. Must be one of: {', '.join(sorted(VALID_LOCATIONS))}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
@@ -89,7 +96,9 @@ def cmd_list(args):
             print(f"Channel ID:     {tenant[7] or '(not set)'}")
             print()
     else:
-        print(f"{'ID':<5} {'Name':<30} {'Location':<10} {'Active':<8} {'Channel ID':<12}")
+        print(
+            f"{'ID':<5} {'Name':<30} {'Location':<10} {'Active':<8} {'Channel ID':<12}"
+        )
         print("-" * 65)
         for tenant in tenants:
             active_str = "Yes" if tenant[4] else "No"
@@ -243,7 +252,7 @@ def cmd_delete(args):
 def cmd_test_sync(args):
     """Test iCal sync for a tenant."""
     try:
-        from vacation_sync import VacationSync
+        from cotd.sync.vacation_sync import VacationSync
     except ImportError:
         print("Error: vacation_sync module not available", file=sys.stderr)
         sys.exit(1)
@@ -256,10 +265,12 @@ def cmd_test_sync(args):
         print(f"Error: Tenant '{args.identifier}' not found", file=sys.stderr)
         sys.exit(1)
 
-    tenant_id, tenant_name, location, webhook_url, active, ical_url = tenant
+    tenant_id, tenant_name, _location, _webhook_url, _active, ical_url = tenant
 
     if not ical_url:
-        print(f"Error: Tenant '{tenant_name}' has no iCal URL configured", file=sys.stderr)
+        print(
+            f"Error: Tenant '{tenant_name}' has no iCal URL configured", file=sys.stderr
+        )
         sys.exit(1)
 
     print(f"Testing iCal sync for tenant '{tenant_name}'...")
@@ -289,13 +300,16 @@ def cmd_sync_status(args):
     tenant_id, tenant_name = tenant[0], tenant[1]
 
     # Get recent sync logs
-    cursor = conn.execute("""
+    cursor = conn.execute(
+        """
         SELECT sync_timestamp, status, events_processed, users_matched, error_message
         FROM vacation_sync_log
         WHERE tenant_id = ?
         ORDER BY sync_timestamp DESC
         LIMIT ?
-    """, (tenant_id, args.limit))
+    """,
+        (tenant_id, args.limit),
+    )
 
     logs = cursor.fetchall()
     conn.close()
@@ -306,14 +320,15 @@ def cmd_sync_status(args):
 
     print(f"Sync logs for tenant '{tenant_name}':")
     print()
-    print(f"{'Timestamp':<20} {'Status':<10} {'Events':<8} {'Matched':<8} {'Error':<50}")
+    print(
+        f"{'Timestamp':<20} {'Status':<10} {'Events':<8} {'Matched':<8} {'Error':<50}"
+    )
     print("-" * 96)
 
     for log in logs:
         timestamp, status, events, matched, error = log
         error_str = error[:47] + "..." if error and len(error) > 50 else (error or "")
         print(f"{timestamp:<20} {status:<10} {events:<8} {matched:<8} {error_str:<50}")
-
 
 
 def main():
@@ -345,8 +360,12 @@ def main():
     update_parser.add_argument("--name", help="New tenant name")
     update_parser.add_argument("--location", help="New location")
     update_parser.add_argument("--webhook", help="New webhook URL")
-    update_parser.add_argument("--ical-url", help="iCal feed URL (use empty string to clear)")
-    update_parser.add_argument("--channel-id", help="Slack channel ID for notifications")
+    update_parser.add_argument(
+        "--ical-url", help="iCal feed URL (use empty string to clear)"
+    )
+    update_parser.add_argument(
+        "--channel-id", help="Slack channel ID for notifications"
+    )
 
     # Deactivate command
     deactivate_parser = subparsers.add_parser("deactivate", help="Deactivate a tenant")
@@ -364,13 +383,19 @@ def main():
     )
 
     # Test sync command
-    test_sync_parser = subparsers.add_parser("test-sync", help="Test iCal sync for a tenant")
+    test_sync_parser = subparsers.add_parser(
+        "test-sync", help="Test iCal sync for a tenant"
+    )
     test_sync_parser.add_argument("identifier", help="Tenant ID or name")
 
     # Sync status command
-    sync_status_parser = subparsers.add_parser("sync-status", help="Show sync logs for a tenant")
+    sync_status_parser = subparsers.add_parser(
+        "sync-status", help="Show sync logs for a tenant"
+    )
     sync_status_parser.add_argument("identifier", help="Tenant ID or name")
-    sync_status_parser.add_argument("--limit", type=int, default=10, help="Number of logs to show (default: 10)")
+    sync_status_parser.add_argument(
+        "--limit", type=int, default=10, help="Number of logs to show (default: 10)"
+    )
 
     args = parser.parse_args()
 

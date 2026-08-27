@@ -1,10 +1,15 @@
 """Tests for vacation validation functions in manage_vacations.py."""
 
 import sqlite3
-import pytest
 from unittest.mock import patch
 
-from manage_vacations import check_vacation_overlap, check_duplicate_vacation, add_vacation
+import pytest
+
+from cotd.cli.manage_vacations import (
+    add_vacation,
+    check_duplicate_vacation,
+    check_vacation_overlap,
+)
 
 
 @pytest.fixture
@@ -42,12 +47,13 @@ def db_with_vacation(tmp_path):
 @pytest.fixture(autouse=True)
 def mock_db(db_with_vacation):
     """Patch get_db_connection to use the temp DB."""
+
     def _get_conn():
         conn = sqlite3.connect(db_with_vacation)
         conn.row_factory = sqlite3.Row
         return conn
 
-    with patch("manage_vacations.get_db_connection", _get_conn):
+    with patch("cotd.cli.manage_vacations.get_db_connection", _get_conn):
         yield
 
 

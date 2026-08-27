@@ -100,9 +100,10 @@ wheels = [
 
 [[package]]
 name = "cotd"
-version = "1.2.0"
-source = { virtual = "." }
+version = "1.3.0"
+source = { editable = "." }
 dependencies = [
+    { name = "flask" },
     { name = "holidays" },
     { name = "icalendar" },
     { name = "python-dotenv" },
@@ -112,7 +113,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "flask" },
     { name = "freezegun" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -121,6 +121,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "flask", specifier = ">=3.1.3" },
     { name = "holidays", specifier = ">=0.91" },
     { name = "icalendar", specifier = ">=7.0.2" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
@@ -130,7 +131,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "flask", specifier = ">=3.1.3" },
     { name = "freezegun", specifier = ">=1.5.5" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-cov", specifier = ">=7.1.0" },

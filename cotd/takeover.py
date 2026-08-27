@@ -1,24 +1,17 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "flask>=3.0.0",
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
 """Small web app that handles catcher takeover registrations."""
 
 import datetime
 import hashlib
 import hmac
 import logging
+
+logger = logging.getLogger(__name__)
 import sqlite3
 
-from flask import Flask, request
 from dotenv import load_dotenv
+from flask import Flask, request
 
-from db import DATABASE_PATH
+from cotd.db import DATABASE_PATH
 
 load_dotenv()
 
@@ -62,7 +55,7 @@ text-align:center;max-width:400px;color:#c00}}</style></head>
 
 
 def _verify_nonce(tenant_id: str, nonce: str, secret: str) -> bool:
-    today = datetime.date.today().isoformat()
+    today = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
     expected = hmac.new(
         secret.encode(), f"{tenant_id}{today}".encode(), hashlib.sha256
     ).hexdigest()
@@ -99,7 +92,7 @@ def takeover():
         if not user:
             return ERROR_HTML.format(message="User not found."), 404
 
-        today = datetime.date.today().isoformat()
+        today = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
 
         # Check if a takeover already happened today for this tenant
         existing = conn.execute(
@@ -133,11 +126,16 @@ def takeover():
         )
         conn.commit()
 
-        logging.info(f"Takeover: tenant={tenant_id} new_catcher={uid}")
+        logger.info(f"Takeover: tenant={tenant_id} new_catcher={uid}")
         return THANK_YOU_HTML
     finally:
         conn.close()
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Start the takeover web application."""
     app.run(host="0.0.0.0", port=8090)
+
+
+if __name__ == "__main__":
+    main()

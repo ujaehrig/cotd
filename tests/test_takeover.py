@@ -4,12 +4,12 @@ import datetime
 import hashlib
 import hmac
 import sqlite3
-
-import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from catcher import generate_registration_url
+import pytest
+
+from cotd.catcher import generate_registration_url
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def db(tmp_path):
 
 
 class TestGenerateRegistrationUrl:
-    @patch("catcher.TAKEOVER_BASE_URL", "https://cotd.example.com")
+    @patch("cotd.catcher.TAKEOVER_BASE_URL", "https://cotd.example.com")
     def test_generates_valid_url(self):
         url = generate_registration_url(1, "mysecret")
         assert url.startswith("https://cotd.example.com/takeover?tenant=1&nonce=")
@@ -49,19 +49,19 @@ class TestGenerateRegistrationUrl:
         nonce = url.split("nonce=")[1]
         today = datetime.date.today().isoformat()
         expected = hmac.new(
-            "mysecret".encode(), f"1{today}".encode(), hashlib.sha256
+            b"mysecret", f"1{today}".encode(), hashlib.sha256
         ).hexdigest()
         assert nonce == expected
 
-    @patch("catcher.TAKEOVER_BASE_URL", "")
+    @patch("cotd.catcher.TAKEOVER_BASE_URL", "")
     def test_returns_empty_when_no_base_url(self):
         assert generate_registration_url(1, "mysecret") == ""
 
-    @patch("catcher.TAKEOVER_BASE_URL", "https://cotd.example.com")
+    @patch("cotd.catcher.TAKEOVER_BASE_URL", "https://cotd.example.com")
     def test_returns_empty_when_no_secret(self):
         assert generate_registration_url(1, "") == ""
 
-    @patch("catcher.TAKEOVER_BASE_URL", "https://cotd.example.com")
+    @patch("cotd.catcher.TAKEOVER_BASE_URL", "https://cotd.example.com")
     def test_different_tenants_produce_different_nonces(self):
         url1 = generate_registration_url(1, "secret")
         url2 = generate_registration_url(2, "secret")
@@ -71,8 +71,8 @@ class TestGenerateRegistrationUrl:
 class TestTakeoverApp:
     @pytest.fixture
     def client(self, db):
-        with patch("takeover_app.DATABASE_PATH", str(db)):
-            from takeover_app import app
+        with patch("cotd.takeover.DATABASE_PATH", str(db)):
+            from cotd.takeover import app
 
             app.config["TESTING"] = True
             with app.test_client() as client:
@@ -203,11 +203,9 @@ class TestTakeoverApp:
     def test_expired_nonce_from_yesterday_returns_403(self, client):
         yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
         old_nonce = hmac.new(
-            "testsecret".encode(), f"1{yesterday}".encode(), hashlib.sha256
+            b"testsecret", f"1{yesterday}".encode(), hashlib.sha256
         ).hexdigest()
-        resp = client.get(
-            f"/takeover?tenant=1&nonce={old_nonce}&uid=alice@example.com"
-        )
+        resp = client.get(f"/takeover?tenant=1&nonce={old_nonce}&uid=alice@example.com")
         assert resp.status_code == 403
 
 
@@ -236,7 +234,7 @@ class TestCleanupOldTakeoverLog:
         return conn
 
     def test_deletes_old_records(self, db_with_takeover_log):
-        from cleanup import cleanup_old_takeover_log
+        from cotd.cleanup import cleanup_old_takeover_log
 
         deleted = cleanup_old_takeover_log(db_with_takeover_log, retention_days=365)
         assert deleted == 1
@@ -246,7 +244,7 @@ class TestCleanupOldTakeoverLog:
         assert count == 1
 
     def test_dry_run_does_not_delete(self, db_with_takeover_log):
-        from cleanup import cleanup_old_takeover_log
+        from cotd.cleanup import cleanup_old_takeover_log
 
         deleted = cleanup_old_takeover_log(
             db_with_takeover_log, retention_days=365, dry_run=True
@@ -258,7 +256,7 @@ class TestCleanupOldTakeoverLog:
         assert count == 2
 
     def test_nothing_to_delete(self, db_with_takeover_log):
-        from cleanup import cleanup_old_takeover_log
+        from cotd.cleanup import cleanup_old_takeover_log
 
         deleted = cleanup_old_takeover_log(db_with_takeover_log, retention_days=500)
         assert deleted == 0

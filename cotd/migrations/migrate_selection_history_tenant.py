@@ -1,11 +1,3 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
 """
 Migration script to add tenant_id to selection_history and remove user.last_chosen.
 
@@ -17,13 +9,15 @@ This script:
 """
 
 import logging
+
+logger = logging.getLogger(__name__)
 import sqlite3
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from db import DATABASE_PATH, get_db_connection
+from cotd.db import DATABASE_PATH, get_db_connection
 
 load_dotenv()
 
@@ -41,10 +35,10 @@ def has_column(cursor, table, column):
 def step_add_tenant_id(cursor):
     """Add tenant_id column and backfill from user.tenant_id."""
     if has_column(cursor, "selection_history", "tenant_id"):
-        logging.info("selection_history.tenant_id already exists, skipping")
+        logger.info("selection_history.tenant_id already exists, skipping")
         return
 
-    logging.info("Adding tenant_id column to selection_history...")
+    logger.info("Adding tenant_id column to selection_history...")
 
     # Add as nullable first so we can backfill
     cursor.execute("ALTER TABLE selection_history ADD COLUMN tenant_id INTEGER")
@@ -59,13 +53,13 @@ def step_add_tenant_id(cursor):
     cursor.execute("SELECT COUNT(*) FROM selection_history WHERE tenant_id IS NULL")
     null_count = cursor.fetchone()[0]
     if null_count > 0:
-        logging.warning(
+        logger.warning(
             f"{null_count} selection_history rows have no matching user, "
             "deleting orphaned records"
         )
         cursor.execute("DELETE FROM selection_history WHERE tenant_id IS NULL")
 
-    logging.info("Backfill complete")
+    logger.info("Backfill complete")
 
 
 def step_enforce_not_null(cursor):
@@ -76,10 +70,10 @@ def step_enforce_not_null(cursor):
     )
     schema = cursor.fetchone()[0]
     if "tenant_id INTEGER NOT NULL" in schema:
-        logging.info("tenant_id already NOT NULL, skipping table rebuild")
+        logger.info("tenant_id already NOT NULL, skipping table rebuild")
         return
 
-    logging.info("Rebuilding selection_history to enforce NOT NULL on tenant_id...")
+    logger.info("Rebuilding selection_history to enforce NOT NULL on tenant_id...")
 
     cursor.execute("""
         CREATE TABLE selection_history_new (
@@ -100,7 +94,7 @@ def step_enforce_not_null(cursor):
     cursor.execute("DROP TABLE selection_history")
     cursor.execute("ALTER TABLE selection_history_new RENAME TO selection_history")
 
-    logging.info("Table rebuilt with NOT NULL constraint")
+    logger.info("Table rebuilt with NOT NULL constraint")
 
 
 def step_create_indexes(cursor):
@@ -110,9 +104,9 @@ def step_create_indexes(cursor):
         WHERE type='index' AND name='idx_selection_history_tenant_date'
     """)
     if cursor.fetchone():
-        logging.info("Index idx_selection_history_tenant_date already exists")
+        logger.info("Index idx_selection_history_tenant_date already exists")
     else:
-        logging.info("Creating index on (tenant_id, selected_date)...")
+        logger.info("Creating index on (tenant_id, selected_date)...")
         cursor.execute("""
             CREATE INDEX idx_selection_history_tenant_date
             ON selection_history(tenant_id, selected_date)
@@ -143,25 +137,25 @@ def step_create_indexes(cursor):
 def step_drop_last_chosen(cursor):
     """Drop the last_chosen column from user table."""
     if not has_column(cursor, "user", "last_chosen"):
-        logging.info("user.last_chosen already removed, skipping")
+        logger.info("user.last_chosen already removed, skipping")
         return
 
-    logging.info("Dropping user.last_chosen column...")
+    logger.info("Dropping user.last_chosen column...")
     cursor.execute("ALTER TABLE user DROP COLUMN last_chosen")
-    logging.info("user.last_chosen removed")
+    logger.info("user.last_chosen removed")
 
 
 def main():
     """Run the migration."""
     if not Path(DATABASE_PATH).exists():
-        logging.error(f"Database file {DATABASE_PATH} not found")
+        logger.error(f"Database file {DATABASE_PATH} not found")
         sys.exit(1)
 
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
 
-            logging.info("Starting selection_history tenant migration...")
+            logger.info("Starting selection_history tenant migration...")
 
             step_add_tenant_id(cursor)
             step_enforce_not_null(cursor)
@@ -169,10 +163,10 @@ def main():
             step_drop_last_chosen(cursor)
 
             conn.commit()
-            logging.info("Migration completed successfully!")
+            logger.info("Migration completed successfully!")
 
     except sqlite3.Error as e:
-        logging.error(f"Database error during migration: {e}")
+        logger.error(f"Database error during migration: {e}")
         sys.exit(1)
 
 

@@ -1,15 +1,3 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "requests>=2.25.0",
-#    "python-dotenv>=1.0.0",
-#    "holidays>=0.34",
-#    "icalendar>=7.0.0",
-#    "rapidfuzz>=3.0.0"
-# ]
-# ///
-
 import argparse
 import datetime
 import hashlib
@@ -27,14 +15,14 @@ import holidays
 import requests
 from dotenv import load_dotenv
 
-from cleanup import cleanup_old_selection_history, cleanup_old_takeover_log
-from db import DATABASE_PATH, get_db_connection
+from cotd.cleanup import cleanup_old_selection_history, cleanup_old_takeover_log
+from cotd.db import DATABASE_PATH, get_db_connection
 
 logger = logging.getLogger(__name__)
 
 # Import vacation sync
 try:
-    from vacation_sync import VacationSync
+    from cotd.sync.vacation_sync import VacationSync
 
     VACATION_SYNC_AVAILABLE = True
 except ImportError:

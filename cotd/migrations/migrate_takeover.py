@@ -1,18 +1,10 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
 """Migration: add takeover_secret column to tenants table."""
 
 import sqlite3
 
 from dotenv import load_dotenv
 
-from db import DATABASE_PATH
+from cotd.db import DATABASE_PATH
 
 load_dotenv()
 

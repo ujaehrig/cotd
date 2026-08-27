@@ -1,5 +1,3 @@
-#!/usr/bin/env -S uv run --script
-
 # /// script
 # dependencies = [
 #    "pytest>=7.0.0",
@@ -9,10 +7,11 @@
 # ]
 # ///
 
-import sqlite3
-import pytest
 import datetime
+import sqlite3
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture
@@ -91,18 +90,19 @@ def test_db_with_tenant_users(tmp_path):
 
 def test_find_next_catcher_filters_by_tenant(test_db_with_tenant_users):
     """Test that find_next_catcher filters users by tenant_id."""
-    from catcher import find_next_catcher
     from unittest.mock import patch
+
+    from cotd.catcher import find_next_catcher
 
     conn = sqlite3.connect(test_db_with_tenant_users)
 
     # Mock weekend and holiday checks
     with (
-        patch("catcher.is_weekend", return_value=False),
-        patch("catcher.is_holiday", return_value=False),
+        patch("cotd.catcher.is_weekend", return_value=False),
+        patch("cotd.catcher.is_holiday", return_value=False),
     ):
         # Should only return users from tenant 1
-        mail, is_new = find_next_catcher(conn, tenant_id=1, dry_run=True)
+        mail, _is_new = find_next_catcher(conn, tenant_id=1, dry_run=True)
 
         assert mail is not None
         assert mail in ["alpha1@example.com", "alpha2@example.com"]
@@ -113,17 +113,18 @@ def test_find_next_catcher_filters_by_tenant(test_db_with_tenant_users):
 
 def test_find_next_catcher_excludes_other_tenants(test_db_with_tenant_users):
     """Test that users from other tenants are not included."""
-    from catcher import find_next_catcher
     from unittest.mock import patch
+
+    from cotd.catcher import find_next_catcher
 
     conn = sqlite3.connect(test_db_with_tenant_users)
 
     with (
-        patch("catcher.is_weekend", return_value=False),
-        patch("catcher.is_holiday", return_value=False),
+        patch("cotd.catcher.is_weekend", return_value=False),
+        patch("cotd.catcher.is_holiday", return_value=False),
     ):
         # Process tenant 2
-        mail, is_new = find_next_catcher(conn, tenant_id=2, dry_run=True)
+        mail, _is_new = find_next_catcher(conn, tenant_id=2, dry_run=True)
 
         assert mail is not None
         assert mail in ["beta1@example.com", "beta2@example.com"]
@@ -134,8 +135,9 @@ def test_find_next_catcher_excludes_other_tenants(test_db_with_tenant_users):
 
 def test_find_next_catcher_returns_none_when_no_users(test_db_with_tenant_users):
     """Test that None is returned when tenant has no users."""
-    from catcher import find_next_catcher
     from unittest.mock import patch
+
+    from cotd.catcher import find_next_catcher
 
     conn = sqlite3.connect(test_db_with_tenant_users)
 
@@ -147,10 +149,10 @@ def test_find_next_catcher_returns_none_when_no_users(test_db_with_tenant_users)
     conn.commit()
 
     with (
-        patch("catcher.is_weekend", return_value=False),
-        patch("catcher.is_holiday", return_value=False),
+        patch("cotd.catcher.is_weekend", return_value=False),
+        patch("cotd.catcher.is_holiday", return_value=False),
     ):
-        mail, is_new = find_next_catcher(conn, tenant_id=3, dry_run=True)
+        mail, _is_new = find_next_catcher(conn, tenant_id=3, dry_run=True)
 
         assert mail is None
 
@@ -159,8 +161,9 @@ def test_find_next_catcher_returns_none_when_no_users(test_db_with_tenant_users)
 
 def test_vacation_filtering_per_tenant(test_db_with_tenant_users):
     """Test that vacation filtering works correctly per tenant."""
-    from catcher import find_next_catcher
     from unittest.mock import patch
+
+    from cotd.catcher import find_next_catcher
 
     conn = sqlite3.connect(test_db_with_tenant_users)
 
@@ -173,11 +176,11 @@ def test_vacation_filtering_per_tenant(test_db_with_tenant_users):
     conn.commit()
 
     with (
-        patch("catcher.is_weekend", return_value=False),
-        patch("catcher.is_holiday", return_value=False),
+        patch("cotd.catcher.is_weekend", return_value=False),
+        patch("cotd.catcher.is_holiday", return_value=False),
     ):
         # Should only return alpha2 (alpha1 is on vacation)
-        mail, is_new = find_next_catcher(conn, tenant_id=1, dry_run=True)
+        mail, _is_new = find_next_catcher(conn, tenant_id=1, dry_run=True)
 
         assert mail == "alpha2@example.com"
 
@@ -186,8 +189,9 @@ def test_vacation_filtering_per_tenant(test_db_with_tenant_users):
 
 def test_weekday_filtering_per_tenant(test_db_with_tenant_users):
     """Test that weekday filtering works correctly per tenant."""
-    from catcher import find_next_catcher
     from unittest.mock import patch
+
+    from cotd.catcher import find_next_catcher
 
     conn = sqlite3.connect(test_db_with_tenant_users)
 
@@ -198,11 +202,11 @@ def test_weekday_filtering_per_tenant(test_db_with_tenant_users):
     conn.commit()
 
     with (
-        patch("catcher.is_weekend", return_value=False),
-        patch("catcher.is_holiday", return_value=False),
+        patch("cotd.catcher.is_weekend", return_value=False),
+        patch("cotd.catcher.is_holiday", return_value=False),
     ):
         # On a weekday, should only return alpha2
-        mail, is_new = find_next_catcher(conn, tenant_id=1, dry_run=True)
+        mail, _is_new = find_next_catcher(conn, tenant_id=1, dry_run=True)
 
         assert mail == "alpha2@example.com"
 
@@ -211,8 +215,9 @@ def test_weekday_filtering_per_tenant(test_db_with_tenant_users):
 
 def test_selection_history_scoped_per_tenant(test_db_with_tenant_users):
     """Test that selection history is properly scoped per tenant."""
-    from catcher import find_next_catcher
     from unittest.mock import patch
+
+    from cotd.catcher import find_next_catcher
 
     conn = sqlite3.connect(test_db_with_tenant_users)
 
@@ -226,8 +231,8 @@ def test_selection_history_scoped_per_tenant(test_db_with_tenant_users):
     conn.commit()
 
     with (
-        patch("catcher.is_weekend", return_value=False),
-        patch("catcher.is_holiday", return_value=False),
+        patch("cotd.catcher.is_weekend", return_value=False),
+        patch("cotd.catcher.is_holiday", return_value=False),
     ):
         # Should return alpha1 as already selected for tenant 1
         mail, is_new = find_next_catcher(conn, tenant_id=1, dry_run=True)

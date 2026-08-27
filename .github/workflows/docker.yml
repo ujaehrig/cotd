@@ -4,8 +4,9 @@ on:
   push:
     branches: [master]
     paths:
-      - 'takeover_app.py'
-      - 'db.py'
+      - 'cotd/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
       - 'Dockerfile'
   workflow_dispatch:
 

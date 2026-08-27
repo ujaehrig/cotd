@@ -1,12 +1,13 @@
 """Tests for vacation_sync.py - vacation synchronization orchestration."""
 
 import sqlite3
-import pytest
 from datetime import date
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from vacation_sync import VacationSync
+import pytest
+
+from cotd.sync.vacation_sync import VacationSync
 
 
 @pytest.fixture
@@ -52,7 +53,13 @@ def db_path(tmp_path):
     # Seed data
     conn.execute(
         "INSERT INTO tenants (name, location, webhook_url, active, ical_url) VALUES (?, ?, ?, ?, ?)",
-        ("Team Alpha", "BW", "https://hooks.example.com/alpha", 1, "https://cal.example.com/alpha.ics"),
+        (
+            "Team Alpha",
+            "BW",
+            "https://hooks.example.com/alpha",
+            1,
+            "https://cal.example.com/alpha.ics",
+        ),
     )
     conn.execute(
         "INSERT INTO tenants (name, location, webhook_url, active) VALUES (?, ?, ?, ?)",
@@ -107,17 +114,26 @@ class TestSyncTenantVacations:
 
         s.parser.fetch_calendar.return_value = Calendar()
         s.parser.extract_events.return_value = [
-            {"title": "Alice Wonder", "start_date": date(2026, 7, 1), "end_date": date(2026, 7, 5), "uid": "ev1"},
+            {
+                "title": "Alice Wonder",
+                "start_date": date(2026, 7, 1),
+                "end_date": date(2026, 7, 5),
+                "uid": "ev1",
+            },
         ]
         s.matcher.match_user.return_value = 1  # alice
 
-        success, msg = s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
+        success, msg = s.sync_tenant_vacations(
+            1, "Team Alpha", "https://cal.example.com/alpha.ics"
+        )
         assert success is True
         assert "1" in msg  # matched 1 vacation
 
         # Verify vacation was inserted
         conn = sqlite3.connect(db_path)
-        count = conn.execute("SELECT COUNT(*) FROM vacation WHERE source = 'ical'").fetchone()[0]
+        count = conn.execute(
+            "SELECT COUNT(*) FROM vacation WHERE source = 'ical'"
+        ).fetchone()[0]
         conn.close()
         assert count == 1
 
@@ -129,7 +145,9 @@ class TestSyncTenantVacations:
         s.parser.extract_events.return_value = []
 
         # Use tenant_id=999 which has no users
-        success, msg = s.sync_tenant_vacations(999, "Empty Team", "https://cal.example.com/empty.ics")
+        success, msg = s.sync_tenant_vacations(
+            999, "Empty Team", "https://cal.example.com/empty.ics"
+        )
         assert success is True
         assert "No users" in msg
 
@@ -137,7 +155,9 @@ class TestSyncTenantVacations:
         s = self._make_sync(db_path)
         s.parser.fetch_calendar.return_value = None
 
-        success, msg = s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
+        success, msg = s.sync_tenant_vacations(
+            1, "Team Alpha", "https://cal.example.com/alpha.ics"
+        )
         # No cached data exists, so should report failure
         assert success is False
         assert "cached" in msg.lower() or "No cached" in msg
@@ -148,19 +168,28 @@ class TestSyncTenantVacations:
 
         s.parser.fetch_calendar.return_value = Calendar()
         s.parser.extract_events.return_value = [
-            {"title": "Unknown Person", "start_date": date(2026, 7, 1), "end_date": date(2026, 7, 5), "uid": "ev1"},
+            {
+                "title": "Unknown Person",
+                "start_date": date(2026, 7, 1),
+                "end_date": date(2026, 7, 5),
+                "uid": "ev1",
+            },
         ]
         s.matcher.match_user.return_value = None
 
-        success, msg = s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
+        success, msg = s.sync_tenant_vacations(
+            1, "Team Alpha", "https://cal.example.com/alpha.ics"
+        )
         assert success is True
         assert "0" in msg  # 0 matched
 
     def test_exception_during_sync(self, db_path):
         s = self._make_sync(db_path)
-        s.parser.fetch_calendar.side_effect = Exception("DB exploded")
+        s.parser.fetch_calendar.side_effect = OSError("DB exploded")
 
-        success, msg = s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
+        success, msg = s.sync_tenant_vacations(
+            1, "Team Alpha", "https://cal.example.com/alpha.ics"
+        )
         assert success is False
         assert "failed" in msg.lower()
 
@@ -171,7 +200,12 @@ class TestSyncTenantVacations:
 
         s.parser.fetch_calendar.return_value = Calendar()
         s.parser.extract_events.return_value = [
-            {"title": "Alice Wonder", "start_date": date(2026, 7, 1), "end_date": date(2026, 7, 5), "uid": "ev1"},
+            {
+                "title": "Alice Wonder",
+                "start_date": date(2026, 7, 1),
+                "end_date": date(2026, 7, 5),
+                "uid": "ev1",
+            },
         ]
         s.matcher.match_user.return_value = 1
 
@@ -179,7 +213,12 @@ class TestSyncTenantVacations:
 
         # Sync again with updated dates
         s.parser.extract_events.return_value = [
-            {"title": "Alice Wonder", "start_date": date(2026, 7, 2), "end_date": date(2026, 7, 6), "uid": "ev1"},
+            {
+                "title": "Alice Wonder",
+                "start_date": date(2026, 7, 2),
+                "end_date": date(2026, 7, 6),
+                "uid": "ev1",
+            },
         ]
         s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
 
@@ -199,8 +238,18 @@ class TestSyncTenantVacations:
 
         s.parser.fetch_calendar.return_value = Calendar()
         s.parser.extract_events.return_value = [
-            {"title": "Alice", "start_date": date(2026, 7, 1), "end_date": date(2026, 7, 5), "uid": "ev1"},
-            {"title": "Alice", "start_date": date(2026, 8, 1), "end_date": date(2026, 8, 5), "uid": "ev2"},
+            {
+                "title": "Alice",
+                "start_date": date(2026, 7, 1),
+                "end_date": date(2026, 7, 5),
+                "uid": "ev1",
+            },
+            {
+                "title": "Alice",
+                "start_date": date(2026, 8, 1),
+                "end_date": date(2026, 8, 5),
+                "uid": "ev2",
+            },
         ]
         s.matcher.match_user.return_value = 1
 
@@ -208,12 +257,19 @@ class TestSyncTenantVacations:
 
         # Second sync with ev2 removed
         s.parser.extract_events.return_value = [
-            {"title": "Alice", "start_date": date(2026, 7, 1), "end_date": date(2026, 7, 5), "uid": "ev1"},
+            {
+                "title": "Alice",
+                "start_date": date(2026, 7, 1),
+                "end_date": date(2026, 7, 5),
+                "uid": "ev1",
+            },
         ]
         s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
 
         conn = sqlite3.connect(db_path)
-        count = conn.execute("SELECT COUNT(*) FROM vacation WHERE source = 'ical'").fetchone()[0]
+        count = conn.execute(
+            "SELECT COUNT(*) FROM vacation WHERE source = 'ical'"
+        ).fetchone()[0]
         conn.close()
         assert count == 1
 
@@ -231,15 +287,24 @@ class TestSyncTenantVacations:
 
         s.parser.fetch_calendar.return_value = Calendar()
         s.parser.extract_events.return_value = [
-            {"title": "Alice", "start_date": date(2026, 7, 1), "end_date": date(2026, 7, 5), "uid": "ev1"},
+            {
+                "title": "Alice",
+                "start_date": date(2026, 7, 1),
+                "end_date": date(2026, 7, 5),
+                "uid": "ev1",
+            },
         ]
         s.matcher.match_user.return_value = 1
 
         s.sync_tenant_vacations(1, "Team Alpha", "https://cal.example.com/alpha.ics")
 
         conn = sqlite3.connect(db_path)
-        manual = conn.execute("SELECT COUNT(*) FROM vacation WHERE source = 'manual'").fetchone()[0]
-        ical = conn.execute("SELECT COUNT(*) FROM vacation WHERE source = 'ical'").fetchone()[0]
+        manual = conn.execute(
+            "SELECT COUNT(*) FROM vacation WHERE source = 'manual'"
+        ).fetchone()[0]
+        ical = conn.execute(
+            "SELECT COUNT(*) FROM vacation WHERE source = 'ical'"
+        ).fetchone()[0]
         conn.close()
         assert manual == 1
         assert ical == 1
@@ -378,7 +443,7 @@ class TestUseCachedData:
     def test_without_cached_entries(self, db_path):
         s = VacationSync(db_path=db_path)
         conn = sqlite3.connect(db_path)
-        success, msg = s._use_cached_data(conn, 1, "Team Alpha")
+        success, _msg = s._use_cached_data(conn, 1, "Team Alpha")
         conn.close()
         assert success is False
 

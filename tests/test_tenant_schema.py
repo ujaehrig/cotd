@@ -1,5 +1,3 @@
-#!/usr/bin/env -S uv run --script
-
 # /// script
 # dependencies = [
 #    "pytest>=7.0.0",
@@ -7,8 +5,9 @@
 # ///
 
 import sqlite3
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture

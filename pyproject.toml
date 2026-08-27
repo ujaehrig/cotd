@@ -1,10 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "cotd"
-version = "1.2.0"
+version = "1.3.0"
 description = "Catcher of the Day - Slack-based daily catcher selection"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "flask>=3.1.3",
     "holidays>=0.91",
     "icalendar>=7.0.2",
     "python-dotenv>=1.1.1",
@@ -14,12 +19,21 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "flask>=3.1.3",
     "freezegun>=1.5.5",
     "pytest>=9.0.2",
     "pytest-cov>=7.1.0",
     "ty>=0.0.55",
 ]
+
+[project.scripts]
+cotd = "cotd.catcher:main"
+cotd-takeover = "cotd.takeover:main"
+cotd-tenants = "cotd.cli.manage_tenants:main"
+cotd-users = "cotd.cli.manage_users:main"
+cotd-vacations = "cotd.cli.manage_vacations:main"
+cotd-stats = "cotd.cli.user_statistics:main"
+cotd-cleanup = "cotd.cli.cleanup_selection_history:main"
+cotd-sync = "cotd.sync.vacation_sync:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

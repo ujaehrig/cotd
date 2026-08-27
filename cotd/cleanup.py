@@ -1,8 +1,8 @@
 """Shared cleanup utilities for selection history and vacations."""
 
-import sqlite3
-import logging
 import datetime
+import logging
+import sqlite3
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,8 @@ def cleanup_old_selection_history(
         Number of records deleted (or that would be deleted)
     """
     cutoff_date = (
-        datetime.date.today() - datetime.timedelta(days=retention_days)
+        datetime.datetime.now(tz=datetime.UTC).date()
+        - datetime.timedelta(days=retention_days)
     ).isoformat()
 
     try:
@@ -78,7 +79,8 @@ def cleanup_old_takeover_log(
         Number of records deleted (or that would be deleted)
     """
     cutoff_date = (
-        datetime.date.today() - datetime.timedelta(days=retention_days)
+        datetime.datetime.now(tz=datetime.UTC).date()
+        - datetime.timedelta(days=retention_days)
     ).isoformat()
 
     try:

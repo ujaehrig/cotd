@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 from freezegun import freeze_time
 
-from catcher import (
+from cotd.catcher import (
     LOOKAHEAD_DAYS,
     VACATION_LOOKAHEAD_BONUS,
     calculate_user_weight,
@@ -150,7 +150,7 @@ class TestGetUpcomingVacationWorkingDays:
         )
         db.commit()
 
-        with patch("catcher.holidays.country_holidays") as mock_holidays:
+        with patch("cotd.catcher.holidays.country_holidays") as mock_holidays:
             holiday_set = {datetime.date(2026, 9, 9)}
             mock_holidays.return_value = holiday_set
             result = get_upcoming_vacation_working_days(db, 1)
@@ -367,8 +367,8 @@ class TestDebugWeightsVacationBonus:
 
         try:
             with (
-                patch("catcher.is_user_on_vacation", return_value=False),
-                patch("catcher.get_last_working_day_catcher", return_value=None),
+                patch("cotd.catcher.is_user_on_vacation", return_value=False),
+                patch("cotd.catcher.get_last_working_day_catcher", return_value=None),
             ):
                 find_next_catcher(
                     conn=db, tenant_id=1, dry_run=True, debug_weights=True

@@ -1,11 +1,3 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
 """
 User management script for Catcher of the Day.
 Allows setting display names/nicknames for users.
@@ -14,8 +6,10 @@ Allows setting display names/nicknames for users.
 import argparse
 import re
 import sys
+
 from dotenv import load_dotenv
-from db import DATABASE_PATH, get_db_connection
+
+from cotd.db import DATABASE_PATH, get_db_connection
 
 load_dotenv()
 

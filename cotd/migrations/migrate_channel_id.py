@@ -1,18 +1,10 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
 """Migration: add slack_channel_id column to tenants table."""
 
 import sqlite3
 
 from dotenv import load_dotenv
 
-from db import DATABASE_PATH
+from cotd.db import DATABASE_PATH
 
 load_dotenv()
 
@@ -29,9 +21,13 @@ def migrate():
         print("Added slack_channel_id column to tenants table.")
         print()
         print("WARNING: You must set slack_channel_id for each tenant:")
-        print('  sqlite3 user.db "UPDATE tenants SET slack_channel_id = \'CXXXXXXX\' WHERE name = \'Team Name\'"')
+        print(
+            "  sqlite3 user.db \"UPDATE tenants SET slack_channel_id = 'CXXXXXXX' WHERE name = 'Team Name'\""
+        )
         print()
-        print("Notifications will be skipped for tenants without a channel ID configured.")
+        print(
+            "Notifications will be skipped for tenants without a channel ID configured."
+        )
     finally:
         conn.close()
 

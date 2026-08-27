@@ -2,14 +2,14 @@
 
 import datetime
 import sqlite3
-
-import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from catcher import (
-    get_recent_selection_count,
+import pytest
+
+from cotd.catcher import (
     get_last_working_day_catcher,
+    get_recent_selection_count,
 )
 
 
@@ -143,7 +143,7 @@ class TestFairnessIsolation:
         conn.commit()
 
         # Even if yesterday is a weekend day, test the concept
-        with patch("catcher.holidays.Germany") as mock_holidays:
+        with patch("cotd.catcher.holidays.country_holidays") as mock_holidays:
             mock_holidays.return_value = {}
             last_t1 = get_last_working_day_catcher(conn, tenant_id=1)
             last_t2 = get_last_working_day_catcher(conn, tenant_id=2)
@@ -227,10 +227,13 @@ class TestMigration:
 
         # Run migration
         with (
-            patch("migrate_selection_history_tenant.DATABASE_PATH", str(db_path)),
-            patch("db.DATABASE_PATH", str(db_path)),
+            patch(
+                "cotd.migrations.migrate_selection_history_tenant.DATABASE_PATH",
+                str(db_path),
+            ),
+            patch("cotd.db.DATABASE_PATH", str(db_path)),
         ):
-            from migrate_selection_history_tenant import main
+            from cotd.migrations.migrate_selection_history_tenant import main
 
             main()
 
@@ -293,10 +296,13 @@ class TestMigration:
         conn.close()
 
         with (
-            patch("migrate_selection_history_tenant.DATABASE_PATH", str(db_path)),
-            patch("db.DATABASE_PATH", str(db_path)),
+            patch(
+                "cotd.migrations.migrate_selection_history_tenant.DATABASE_PATH",
+                str(db_path),
+            ),
+            patch("cotd.db.DATABASE_PATH", str(db_path)),
         ):
-            from migrate_selection_history_tenant import main
+            from cotd.migrations.migrate_selection_history_tenant import main
 
             main()
             # Second run should not raise
@@ -347,8 +353,9 @@ class TestManageUsersMove:
         return db_path
 
     def test_move_user_to_new_tenant(self, move_db, capsys):
-        from manage_users import cmd_move
         import argparse
+
+        from cotd.cli.manage_users import cmd_move
 
         args = argparse.Namespace(
             identifier="alice@example.com", tenant="Team B", db=str(move_db)
@@ -365,8 +372,9 @@ class TestManageUsersMove:
         assert "Team B" in output
 
     def test_move_user_already_in_tenant(self, move_db, capsys):
-        from manage_users import cmd_move
         import argparse
+
+        from cotd.cli.manage_users import cmd_move
 
         args = argparse.Namespace(
             identifier="alice@example.com", tenant="Team A", db=str(move_db)
@@ -377,8 +385,9 @@ class TestManageUsersMove:
         assert "already in tenant" in output
 
     def test_move_user_not_found(self, move_db):
-        from manage_users import cmd_move
         import argparse
+
+        from cotd.cli.manage_users import cmd_move
 
         args = argparse.Namespace(
             identifier="nobody@example.com", tenant="Team B", db=str(move_db)
@@ -387,8 +396,9 @@ class TestManageUsersMove:
             cmd_move(args)
 
     def test_move_tenant_not_found(self, move_db):
-        from manage_users import cmd_move
         import argparse
+
+        from cotd.cli.manage_users import cmd_move
 
         args = argparse.Namespace(
             identifier="alice@example.com", tenant="Nonexistent", db=str(move_db)

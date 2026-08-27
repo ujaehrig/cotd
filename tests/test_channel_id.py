@@ -1,16 +1,16 @@
 """Tests for slack_channel_id feature."""
 
 import sqlite3
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
-from catcher import (
-    get_tenant_by_name,
+from cotd.catcher import (
     get_active_tenants,
-    trigger_slack,
+    get_tenant_by_name,
     process_tenant,
+    trigger_slack,
 )
 
 
@@ -83,7 +83,7 @@ class TestTenantChannelId:
 
 
 class TestTriggerSlackChannelId:
-    @patch("catcher.requests.post")
+    @patch("cotd.catcher.requests.post")
     def test_payload_includes_channel_id(self, mock_post):
         mock_post.return_value = MagicMock(status_code=200)
         trigger_slack(
@@ -98,7 +98,7 @@ class TestTriggerSlackChannelId:
         payload = json.loads(call_args.kwargs.get("data") or call_args[1]["data"])
         assert payload["channel_id"] == "C12345"
 
-    @patch("catcher.requests.post")
+    @patch("cotd.catcher.requests.post")
     def test_payload_without_channel_id(self, mock_post):
         mock_post.return_value = MagicMock(status_code=200)
         trigger_slack(
@@ -113,9 +113,9 @@ class TestTriggerSlackChannelId:
 
 
 class TestProcessTenantChannelId:
-    @patch("catcher.trigger_slack")
-    @patch("catcher.is_weekend", return_value=False)
-    @patch("catcher.is_holiday", return_value=False)
+    @patch("cotd.catcher.trigger_slack")
+    @patch("cotd.catcher.is_weekend", return_value=False)
+    @patch("cotd.catcher.is_holiday", return_value=False)
     def test_skips_notification_when_channel_id_missing(
         self, mock_holiday, mock_weekend, mock_trigger, db
     ):
@@ -124,9 +124,9 @@ class TestProcessTenantChannelId:
         process_tenant(db, tenant)
         mock_trigger.assert_not_called()
 
-    @patch("catcher.trigger_slack", return_value=True)
-    @patch("catcher.is_weekend", return_value=False)
-    @patch("catcher.is_holiday", return_value=False)
+    @patch("cotd.catcher.trigger_slack", return_value=True)
+    @patch("cotd.catcher.is_weekend", return_value=False)
+    @patch("cotd.catcher.is_holiday", return_value=False)
     def test_sends_notification_when_channel_id_present(
         self, mock_holiday, mock_weekend, mock_trigger, db
     ):

@@ -6,10 +6,13 @@ LABEL org.opencontainers.image.source="https://github.com/ujaehrig/cotd"
 
 WORKDIR /app
 
-COPY takeover_app.py db.py ./
+COPY pyproject.toml uv.lock ./
+COPY cotd/ cotd/
+
+RUN uv sync --no-dev
 
 ENV DB_PATH=/data/user.db
 
 EXPOSE 8090
 
-CMD ["uv", "run", "--script", "takeover_app.py"]
+CMD ["uv", "run", "cotd-takeover"]

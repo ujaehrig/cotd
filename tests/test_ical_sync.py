@@ -1,10 +1,12 @@
 """Tests for ical_sync.py - iCal calendar fetching and parsing."""
 
-import pytest
 from datetime import date, datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 from icalendar import Calendar, Event
-from ical_sync import ICalParser
+
+from cotd.sync.ical_sync import ICalParser
 
 
 @pytest.fixture
@@ -51,7 +53,7 @@ class TestICalParserInit:
 
 
 class TestFetchCalendar:
-    @patch("ical_sync.requests.get")
+    @patch("cotd.sync.ical_sync.requests.get")
     def test_success(self, mock_get, parser):
         cal = Calendar()
         mock_resp = MagicMock()
@@ -63,15 +65,15 @@ class TestFetchCalendar:
         assert result is not None
         mock_get.assert_called_once_with("https://example.com/cal.ics", timeout=5)
 
-    @patch("ical_sync.requests.get")
+    @patch("cotd.sync.ical_sync.requests.get")
     def test_network_error_returns_none(self, mock_get, parser):
-        mock_get.side_effect = Exception("Connection refused")
+        mock_get.side_effect = OSError("Connection refused")
         assert parser.fetch_calendar("https://bad.url") is None
 
-    @patch("ical_sync.requests.get")
+    @patch("cotd.sync.ical_sync.requests.get")
     def test_http_error_returns_none(self, mock_get, parser):
         mock_resp = MagicMock()
-        mock_resp.raise_for_status.side_effect = Exception("404")
+        mock_resp.raise_for_status.side_effect = ValueError("404")
         mock_get.return_value = mock_resp
         assert parser.fetch_calendar("https://example.com/missing.ics") is None
 
@@ -79,7 +81,12 @@ class TestFetchCalendar:
 class TestExtractEvents:
     def test_basic_event(self, parser):
         cal = _make_calendar(
-            {"summary": "Vacation John", "start": date(2026, 7, 1), "end": date(2026, 7, 5), "uid": "ev1"}
+            {
+                "summary": "Vacation John",
+                "start": date(2026, 7, 1),
+                "end": date(2026, 7, 5),
+                "uid": "ev1",
+            }
         )
         events = parser.extract_events(cal, start_date=date(2026, 1, 1))
         assert len(events) == 1
@@ -89,14 +96,23 @@ class TestExtractEvents:
 
     def test_filters_past_events(self, parser):
         cal = _make_calendar(
-            {"summary": "Old vacation", "start": date(2020, 1, 1), "end": date(2020, 1, 5)}
+            {
+                "summary": "Old vacation",
+                "start": date(2020, 1, 1),
+                "end": date(2020, 1, 5),
+            }
         )
         events = parser.extract_events(cal, start_date=date(2026, 1, 1))
         assert len(events) == 0
 
     def test_datetime_converted_to_date(self, parser):
         cal = _make_calendar(
-            {"summary": "Meeting", "start": datetime(2026, 8, 1, 9, 0), "end": datetime(2026, 8, 1, 17, 0), "uid": "dt1"}
+            {
+                "summary": "Meeting",
+                "start": datetime(2026, 8, 1, 9, 0),
+                "end": datetime(2026, 8, 1, 17, 0),
+                "uid": "dt1",
+            }
         )
         events = parser.extract_events(cal, start_date=date(2026, 1, 1))
         assert events[0]["start_date"] == date(2026, 8, 1)
@@ -116,14 +132,24 @@ class TestExtractEvents:
 
     def test_confluence_leaves_type_included(self, parser):
         cal = _make_calendar(
-            {"summary": "Leave John", "start": date(2026, 7, 1), "end": date(2026, 7, 5), "subcal_type": "leaves"}
+            {
+                "summary": "Leave John",
+                "start": date(2026, 7, 1),
+                "end": date(2026, 7, 5),
+                "subcal_type": "leaves",
+            }
         )
         events = parser.extract_events(cal, start_date=date(2026, 1, 1))
         assert len(events) == 1
 
     def test_confluence_non_leaves_type_excluded(self, parser):
         cal = _make_calendar(
-            {"summary": "Sprint Planning", "start": date(2026, 7, 1), "end": date(2026, 7, 5), "subcal_type": "events"}
+            {
+                "summary": "Sprint Planning",
+                "start": date(2026, 7, 1),
+                "end": date(2026, 7, 5),
+                "subcal_type": "events",
+            }
         )
         events = parser.extract_events(cal, start_date=date(2026, 1, 1))
         assert len(events) == 0
@@ -148,8 +174,16 @@ class TestExtractEvents:
 
     def test_multiple_events(self, parser):
         cal = _make_calendar(
-            {"summary": "Vacation A", "start": date(2026, 7, 1), "end": date(2026, 7, 5)},
-            {"summary": "Vacation B", "start": date(2026, 8, 1), "end": date(2026, 8, 5)},
+            {
+                "summary": "Vacation A",
+                "start": date(2026, 7, 1),
+                "end": date(2026, 7, 5),
+            },
+            {
+                "summary": "Vacation B",
+                "start": date(2026, 8, 1),
+                "end": date(2026, 8, 5),
+            },
         )
         events = parser.extract_events(cal, start_date=date(2026, 1, 1))
         assert len(events) == 2

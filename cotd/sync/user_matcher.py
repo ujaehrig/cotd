@@ -1,18 +1,11 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "rapidfuzz>=3.0.0",
-# ]
-# ///
-
 """
 User matching module for fuzzy matching calendar event names to users.
 """
 
 import os
 import re
-from typing import Optional, List, Tuple, Sequence
+from collections.abc import Sequence
+
 from rapidfuzz import fuzz
 
 
@@ -31,7 +24,7 @@ class UserMatcher:
             threshold = int(os.environ.get("FUZZY_MATCH_THRESHOLD", "80"))
         self.threshold = threshold
 
-    def extract_names(self, event_title: str) -> List[str]:
+    def extract_names(self, event_title: str) -> list[str]:
         """
         Extract potential names from event title.
 
@@ -43,26 +36,32 @@ class UserMatcher:
         """
         # Remove common vacation keywords
         keywords = [
-            "vacation", "holiday", "ooo", "out of office", "pto", "off", "away",
-            "urlaub", "abwesend", "frei"
+            "vacation",
+            "holiday",
+            "ooo",
+            "out of office",
+            "pto",
+            "off",
+            "away",
+            "urlaub",
+            "abwesend",
+            "frei",
         ]
 
         cleaned = event_title.lower()
         for keyword in keywords:
-            cleaned = re.sub(rf'\b{keyword}\b', '', cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(rf"\b{keyword}\b", "", cleaned, flags=re.IGNORECASE)
 
         # Remove special characters and extra whitespace
-        cleaned = re.sub(r'[:\-_/]', ' ', cleaned)
-        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        cleaned = re.sub(r"[:\-_/]", " ", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
         # Return the cleaned string as potential name
         return [cleaned] if cleaned else []
 
     def match_user(
-        self,
-        event_title: str,
-        users: Sequence[Tuple[int, str, Optional[str]]]
-    ) -> Optional[int]:
+        self, event_title: str, users: Sequence[tuple[int, str, str | None]]
+    ) -> int | None:
         """
         Match event title to a user.
 
@@ -81,7 +80,7 @@ class UserMatcher:
         candidates = []
         for user_id, email, display_name in users:
             # Extract name from email (before @)
-            email_name = email.split('@')[0].replace('.', ' ').replace('_', ' ')
+            email_name = email.split("@")[0].replace(".", " ").replace("_", " ")
             candidates.append((user_id, email_name))
 
             # Also add first and last name separately

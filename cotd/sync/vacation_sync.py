@@ -1,26 +1,15 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "icalendar>=7.0.0",
-#    "rapidfuzz>=3.0.0",
-#    "requests>=2.25.0",
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
 """
 Vacation sync module that orchestrates iCal fetching, user matching, and database updates.
 """
 
-import sqlite3
 import logging
-from datetime import datetime
-from typing import Optional, List, Tuple
+import sqlite3
+from datetime import UTC, datetime
+
 from dotenv import load_dotenv
 
-from ical_sync import ICalParser
-from user_matcher import UserMatcher
+from .ical_sync import ICalParser
+from .user_matcher import UserMatcher
 
 load_dotenv()
 
@@ -38,17 +27,16 @@ class VacationSync:
             db_path: Path to database file. If None, uses DB_PATH env var or default.
         """
         if db_path is None:
-            from db import DATABASE_PATH
+            from cotd.db import DATABASE_PATH
+
             db_path = DATABASE_PATH
         self.db_path = db_path
         self.parser = ICalParser()
         self.matcher = UserMatcher()
 
     def get_tenant_users(
-        self, 
-        conn: sqlite3.Connection, 
-        tenant_id: int
-    ) -> List[Tuple[int, str, Optional[str]]]:
+        self, conn: sqlite3.Connection, tenant_id: int
+    ) -> list[tuple[int, str, str | None]]:
         """
         Get all users for a tenant.
 
@@ -61,18 +49,17 @@ class VacationSync:
         """
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, mail, display_name FROM user WHERE tenant_id = ?",
-            (tenant_id,)
+            "SELECT id, mail, display_name FROM user WHERE tenant_id = ?", (tenant_id,)
         )
         return cursor.fetchall()
 
     def sync_tenant_vacations(
-        self, 
-        tenant_id: int, 
+        self,
+        tenant_id: int,
         tenant_name: str,
         ical_url: str,
-        conn: Optional[sqlite3.Connection] = None
-    ) -> Tuple[bool, str]:
+        conn: sqlite3.Connection | None = None,
+    ) -> tuple[bool, str]:
         """
         Sync vacations for a single tenant.
 
@@ -87,7 +74,9 @@ class VacationSync:
         Returns:
             Tuple of (success: bool, message: str)
         """
-        logger.info(f"Starting vacation sync for tenant '{tenant_name}' (ID: {tenant_id})")
+        logger.info(
+            f"Starting vacation sync for tenant '{tenant_name}' (ID: {tenant_id})"
+        )
 
         # Reuse the caller's connection when given. Opening a second connection
         # to the same SQLite database while the caller holds an (uncommitted)
@@ -97,13 +86,15 @@ class VacationSync:
         if owns_conn:
             conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         try:
             # Fetch calendar
             calendar = self.parser.fetch_calendar(ical_url)
             if calendar is None:
                 # Try to use cached data
-                logger.warning(f"Failed to fetch calendar for '{tenant_name}', using cached data")
+                logger.warning(
+                    f"Failed to fetch calendar for '{tenant_name}', using cached data"
+                )
                 return self._use_cached_data(conn, tenant_id, tenant_name)
 
             # Extract events
@@ -122,14 +113,15 @@ class VacationSync:
             # Upsert matched events and track active UIDs
             matched_count = 0
             active_uids = set()
-            sync_time = datetime.now()
+            sync_time = datetime.now(tz=UTC)
 
             for event in events:
-                user_id = self.matcher.match_user(event['title'], users)
+                user_id = self.matcher.match_user(event["title"], users)
                 if user_id:
-                    uid = event['uid']
+                    uid = event["uid"]
                     active_uids.add(uid)
-                    cursor.execute("""
+                    cursor.execute(
+                        """
                         INSERT INTO vacation
                         (user_id, start_date, end_date, source, last_synced, ical_event_uid)
                         VALUES (?, ?, ?, 'ical', ?, ?)
@@ -137,34 +129,42 @@ class VacationSync:
                             start_date = excluded.start_date,
                             end_date = excluded.end_date,
                             last_synced = excluded.last_synced
-                    """, (
-                        user_id,
-                        event['start_date'].isoformat(),
-                        event['end_date'].isoformat(),
-                        sync_time.isoformat(),
-                        uid,
-                    ))
+                    """,
+                        (
+                            user_id,
+                            event["start_date"].isoformat(),
+                            event["end_date"].isoformat(),
+                            sync_time.isoformat(),
+                            uid,
+                        ),
+                    )
                     matched_count += 1
                     logger.debug(f"Matched '{event['title']}' to user {user_id}")
 
             # Remove stale iCal vacations no longer in the calendar
             tenant_user_ids = [u[0] for u in users]
             if tenant_user_ids:
-                placeholders = ','.join('?' * len(tenant_user_ids))
+                placeholders = ",".join("?" * len(tenant_user_ids))
                 if active_uids:
-                    uid_placeholders = ','.join('?' * len(active_uids))
-                    cursor.execute(f"""
+                    uid_placeholders = ",".join("?" * len(active_uids))
+                    cursor.execute(
+                        f"""
                         DELETE FROM vacation
                         WHERE user_id IN ({placeholders})
                         AND source = 'ical'
                         AND ical_event_uid NOT IN ({uid_placeholders})
-                    """, tenant_user_ids + list(active_uids))
+                    """,
+                        tenant_user_ids + list(active_uids),
+                    )
                 else:
-                    cursor.execute(f"""
+                    cursor.execute(
+                        f"""
                         DELETE FROM vacation
                         WHERE user_id IN ({placeholders})
                         AND source = 'ical'
-                    """, tenant_user_ids)
+                    """,
+                        tenant_user_ids,
+                    )
                 stale_count = cursor.rowcount
                 if stale_count:
                     logger.info(f"Removed {stale_count} stale iCal vacation entries")
@@ -177,8 +177,8 @@ class VacationSync:
             logger.info(f"Sync completed for '{tenant_name}': {msg}")
             return True, msg
 
-        except Exception as e:
-            error_msg = f"Sync failed: {str(e)}"
+        except (OSError, ValueError, sqlite3.Error) as e:
+            error_msg = f"Sync failed: {e!s}"
             logger.error(f"Error syncing tenant '{tenant_name}': {error_msg}")
             self._log_sync(conn, tenant_id, "error", 0, 0, error_msg)
             conn.commit()
@@ -188,11 +188,8 @@ class VacationSync:
                 conn.close()
 
     def _use_cached_data(
-        self, 
-        conn: sqlite3.Connection, 
-        tenant_id: int,
-        tenant_name: str
-    ) -> Tuple[bool, str]:
+        self, conn: sqlite3.Connection, tenant_id: int, tenant_name: str
+    ) -> tuple[bool, str]:
         """
         Check if cached vacation data exists and is recent.
 
@@ -205,21 +202,26 @@ class VacationSync:
             Tuple of (success: bool, message: str)
         """
         cursor = conn.cursor()
-        
+
         # Check for recent cached data
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT COUNT(*) FROM vacation v
             JOIN user u ON v.user_id = u.id
             WHERE u.tenant_id = ? AND v.source = 'ical'
             AND v.last_synced IS NOT NULL
-        """, (tenant_id,))
-        
+        """,
+            (tenant_id,),
+        )
+
         cached_count = cursor.fetchone()[0]
-        
+
         if cached_count > 0:
             msg = f"Using {cached_count} cached vacation entries"
             logger.info(f"Tenant '{tenant_name}': {msg}")
-            self._log_sync(conn, tenant_id, "cached", 0, cached_count, "Using cached data")
+            self._log_sync(
+                conn, tenant_id, "cached", 0, cached_count, "Using cached data"
+            )
             return True, msg
         else:
             msg = "No cached data available"
@@ -234,46 +236,53 @@ class VacationSync:
         status: str,
         events_processed: int,
         users_matched: int,
-        error_message: Optional[str]
+        error_message: str | None,
     ) -> None:
         """Log sync operation to database."""
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO vacation_sync_log 
             (tenant_id, status, events_processed, users_matched, error_message)
             VALUES (?, ?, ?, ?, ?)
-        """, (tenant_id, status, events_processed, users_matched, error_message))
+        """,
+            (tenant_id, status, events_processed, users_matched, error_message),
+        )
 
     def sync_all_tenants(self) -> None:
         """Sync vacations for all tenants with iCal URLs configured."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         cursor.execute("""
             SELECT id, name, ical_url 
             FROM tenants 
             WHERE ical_url IS NOT NULL AND ical_url != ''
             AND active = 1
         """)
-        
+
         tenants = cursor.fetchall()
         conn.close()
-        
+
         if not tenants:
             logger.info("No tenants with iCal URLs configured")
             return
-        
+
         logger.info(f"Syncing vacations for {len(tenants)} tenant(s)")
-        
+
         for tenant_id, tenant_name, ical_url in tenants:
             self.sync_tenant_vacations(tenant_id, tenant_name, ical_url)
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run vacation sync for all tenants."""
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s"
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
     )
-    
+
     sync = VacationSync()
     sync.sync_all_tenants()
+
+
+if __name__ == "__main__":
+    main()

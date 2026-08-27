@@ -1,8 +1,9 @@
-#!/usr/bin/env -S uv run --script
-
-import sqlite3
 import logging
-from db import DATABASE_PATH
+
+logger = logging.getLogger(__name__)
+import sqlite3
+
+from cotd.db import DATABASE_PATH
 
 # Configure logging
 logging.basicConfig(
@@ -24,18 +25,18 @@ def migrate_vacations():
         conn = sqlite3.connect(DATABASE_PATH)
         cursor = conn.cursor()
 
-        logging.info("Starting database migration for multiple vacation periods...")
+        logger.info("Starting database migration for multiple vacation periods...")
 
         # Check if the vacation table already exists
         cursor.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='vacation'"
         )
         if cursor.fetchone():
-            logging.info("Vacation table already exists. Migration already completed.")
+            logger.info("Vacation table already exists. Migration already completed.")
             return
 
         # Create the new vacation table
-        logging.info("Creating vacation table...")
+        logger.info("Creating vacation table...")
         cursor.execute("""
         CREATE TABLE vacation (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +48,7 @@ def migrate_vacations():
         """)
 
         # Migrate existing vacation data
-        logging.info("Migrating existing vacation data...")
+        logger.info("Migrating existing vacation data...")
         cursor.execute("""
         INSERT INTO vacation (user_id, start_date, end_date)
         SELECT id, vacation_start, vacation_end
@@ -58,10 +59,10 @@ def migrate_vacations():
         # Count migrated records
         cursor.execute("SELECT COUNT(*) FROM vacation")
         migrated_count = cursor.fetchone()[0]
-        logging.info(f"Migrated {migrated_count} vacation periods")
+        logger.info(f"Migrated {migrated_count} vacation periods")
 
         # Remove the old vacation columns from the user table
-        logging.info("Removing old vacation columns from user table...")
+        logger.info("Removing old vacation columns from user table...")
 
         # Create a temporary table without the vacation columns
         cursor.execute("""
@@ -87,10 +88,10 @@ def migrate_vacations():
 
         # Commit the changes
         conn.commit()
-        logging.info("Migration completed successfully")
+        logger.info("Migration completed successfully")
 
     except sqlite3.Error as e:
-        logging.error(f"Database error during migration: {e}")
+        logger.error(f"Database error during migration: {e}")
         conn.rollback()
         raise
     finally:

@@ -1,15 +1,8 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
-import sqlite3
 import logging
 import os
+import sqlite3
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -30,7 +23,8 @@ def migrate_database(db_path: str | None = None) -> None:
         db_path: Path to database file. If None, uses DB_PATH env var or default.
     """
     if db_path is None:
-        from db import DATABASE_PATH
+        from cotd.db import DATABASE_PATH
+
         db_path = DATABASE_PATH
 
     logger.info(f"Starting migration for database: {db_path}")
@@ -55,7 +49,7 @@ def migrate_database(db_path: str | None = None) -> None:
 
         # Create tenants table
         logger.info("Creating tenants table...")
-        schema_path = Path(__file__).parent / "schema_tenants.sql"
+        schema_path = Path(__file__).parent.parent.parent / "schema_tenants.sql"
         schema_sql = schema_path.read_text()
         cursor.executescript(schema_sql)
         conn.commit()

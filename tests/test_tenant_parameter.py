@@ -1,5 +1,3 @@
-#!/usr/bin/env -S uv run --script
-
 # /// script
 # dependencies = [
 #    "pytest>=7.0.0",
@@ -10,8 +8,9 @@
 # ///
 
 import sqlite3
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture
@@ -74,7 +73,7 @@ def test_db_with_tenants(tmp_path):
 
 def test_get_tenant_by_name(test_db_with_tenants):
     """Test retrieving tenant by name."""
-    from catcher import get_tenant_by_name
+    from cotd.catcher import get_tenant_by_name
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "Team Alpha")
@@ -88,7 +87,7 @@ def test_get_tenant_by_name(test_db_with_tenants):
 
 def test_get_tenant_by_name_not_found(test_db_with_tenants):
     """Test retrieving non-existent tenant returns None."""
-    from catcher import get_tenant_by_name
+    from cotd.catcher import get_tenant_by_name
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "NonExistent")
@@ -99,7 +98,7 @@ def test_get_tenant_by_name_not_found(test_db_with_tenants):
 
 def test_get_active_tenants(test_db_with_tenants):
     """Test retrieving all active tenants."""
-    from catcher import get_active_tenants
+    from cotd.catcher import get_active_tenants
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenants = get_active_tenants(conn)
@@ -112,7 +111,7 @@ def test_get_active_tenants(test_db_with_tenants):
 
 def test_get_active_tenants_excludes_inactive(test_db_with_tenants):
     """Test that inactive tenants are excluded."""
-    from catcher import get_active_tenants
+    from cotd.catcher import get_active_tenants
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenants = get_active_tenants(conn)
@@ -124,8 +123,9 @@ def test_get_active_tenants_excludes_inactive(test_db_with_tenants):
 
 def test_process_tenant_returns_success(test_db_with_tenants):
     """Test processing a single tenant returns success."""
-    from catcher import process_tenant, get_tenant_by_name
     from unittest.mock import patch
+
+    from cotd.catcher import get_tenant_by_name, process_tenant
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "Team Alpha")
@@ -133,15 +133,15 @@ def test_process_tenant_returns_success(test_db_with_tenants):
 
     # Mock external dependencies
     with (
-        patch("catcher.is_weekend", return_value=False),
-        patch("catcher.is_holiday", return_value=False),
+        patch("cotd.catcher.is_weekend", return_value=False),
+        patch("cotd.catcher.is_holiday", return_value=False),
         patch(
-            "catcher.find_next_catcher",
+            "cotd.catcher.find_next_catcher",
             return_value=("alpha1@example.com", True),
         ),
-        patch("catcher.trigger_slack", return_value=True),
+        patch("cotd.catcher.trigger_slack", return_value=True),
     ):
-        from catcher import process_tenant
+        from cotd.catcher import process_tenant
 
         success = process_tenant(
             conn, tenant, dry_run=True, debug_weights=False, force_notify=False
@@ -153,15 +153,16 @@ def test_process_tenant_returns_success(test_db_with_tenants):
 
 def test_process_tenant_handles_weekend(test_db_with_tenants):
     """Test processing tenant on weekend returns success without selection."""
-    from catcher import process_tenant, get_tenant_by_name
     from unittest.mock import patch
+
+    from cotd.catcher import get_tenant_by_name, process_tenant
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "Team Alpha")
     assert tenant is not None
 
-    with patch("catcher.is_weekend", return_value=True):
-        from catcher import process_tenant
+    with patch("cotd.catcher.is_weekend", return_value=True):
+        from cotd.catcher import process_tenant
 
         success = process_tenant(
             conn, tenant, dry_run=True, debug_weights=False, force_notify=False
@@ -173,15 +174,16 @@ def test_process_tenant_handles_weekend(test_db_with_tenants):
 
 def test_process_tenant_handles_errors(test_db_with_tenants):
     """Test processing tenant handles errors gracefully."""
-    from catcher import process_tenant, get_tenant_by_name
     from unittest.mock import patch
+
+    from cotd.catcher import get_tenant_by_name, process_tenant
 
     conn = sqlite3.connect(test_db_with_tenants)
     tenant = get_tenant_by_name(conn, "Team Alpha")
     assert tenant is not None
 
-    with patch("catcher.is_weekend", side_effect=Exception("Test error")):
-        from catcher import process_tenant
+    with patch("cotd.catcher.is_weekend", side_effect=Exception("Test error")):
+        from cotd.catcher import process_tenant
 
         success = process_tenant(
             conn, tenant, dry_run=True, debug_weights=False, force_notify=False

@@ -1,18 +1,14 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
-import sqlite3
 import argparse
 import logging
+
+logger = logging.getLogger(__name__)
+import sqlite3
 import sys
-from datetime import datetime
+from datetime import date
+
 from dotenv import load_dotenv
-from db import get_db_connection
+
+from cotd.db import get_db_connection
 
 # Load environment variables
 load_dotenv()
@@ -27,10 +23,10 @@ def validate_date(date_str: str) -> str:
     """Validate and format a date string."""
     try:
         # Try to parse the date
-        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-        return date_obj.strftime("%Y-%m-%d")
+        date_obj = date.fromisoformat(date_str)
+        return date_obj.isoformat()
     except ValueError:
-        logging.error(f"Invalid date format: {date_str}. Use YYYY-MM-DD format.")
+        logger.error(f"Invalid date format: {date_str}. Use YYYY-MM-DD format.")
         sys.exit(1)
 
 
@@ -43,12 +39,12 @@ def get_user_id_by_email(email: str) -> int:
             user = cursor.fetchone()
 
             if not user:
-                logging.error(f"User with email '{email}' not found.")
+                logger.error(f"User with email '{email}' not found.")
                 sys.exit(1)
 
             return user["id"]
     except sqlite3.Error as e:
-        logging.error(f"Error looking up user: {e}")
+        logger.error(f"Error looking up user: {e}")
         sys.exit(1)
 
 
@@ -87,7 +83,7 @@ def list_users():
                     f"{user['id']:<5} {user['mail']:<30} {tenant_name:<20} {user['weekdays']:<10} {user['last_selected'] or 'Never':<12}"
                 )
     except sqlite3.Error as e:
-        logging.error(f"Error listing users: {e}")
+        logger.error(f"Error listing users: {e}")
         sys.exit(1)
 
 
@@ -105,7 +101,7 @@ def list_vacations(user_identifier=None, show_all=False):
                     cursor.execute("SELECT mail FROM user WHERE id = ?", (user_id,))
                     user = cursor.fetchone()
                     if not user:
-                        logging.error(f"User with ID {user_id} not found.")
+                        logger.error(f"User with ID {user_id} not found.")
                         sys.exit(1)
                 else:
                     # It's an email address
@@ -176,7 +172,7 @@ def list_vacations(user_identifier=None, show_all=False):
                     f"{vacation['id']:<5} {vacation['mail']:<30} {tenant_name:<20} {vacation['start_date']:<12} {vacation['end_date']:<12}"
                 )
     except sqlite3.Error as e:
-        logging.error(f"Error listing vacations: {e}")
+        logger.error(f"Error listing vacations: {e}")
         sys.exit(1)
 
 
@@ -209,21 +205,21 @@ def add_vacation(user_identifier, start_date, end_date=None, force=False):
 
     # Check that end date is not before start date
     if start > end:
-        logging.error("End date cannot be before start date.")
+        logger.error("End date cannot be before start date.")
         sys.exit(1)
 
     # Check for duplicates and overlaps
     if not force:
         is_dup, dup_msg = check_duplicate_vacation(user_id, start, end)
         if is_dup:
-            logging.warning(dup_msg)
-            logging.info("Use --force to add anyway.")
+            logger.warning(dup_msg)
+            logger.info("Use --force to add anyway.")
             sys.exit(1)
 
         has_overlap, overlap_msg = check_vacation_overlap(user_id, start, end)
         if has_overlap:
-            logging.warning(overlap_msg)
-            logging.info("Use --force to add anyway.")
+            logger.warning(overlap_msg)
+            logger.info("Use --force to add anyway.")
             sys.exit(1)
 
     try:
@@ -234,7 +230,7 @@ def add_vacation(user_identifier, start_date, end_date=None, force=False):
             cursor.execute("SELECT mail FROM user WHERE id = ?", (user_id,))
             user = cursor.fetchone()
             if not user:
-                logging.error(f"User with ID {user_id} not found.")
+                logger.error(f"User with ID {user_id} not found.")
                 sys.exit(1)
 
             # Add vacation period
@@ -249,13 +245,13 @@ def add_vacation(user_identifier, start_date, end_date=None, force=False):
             conn.commit()
 
             if single_day:
-                logging.info(f"Single day vacation added for {user['mail']} on {start}")
+                logger.info(f"Single day vacation added for {user['mail']} on {start}")
             else:
-                logging.info(
+                logger.info(
                     f"Vacation period added for {user['mail']} from {start} to {end}"
                 )
     except sqlite3.Error as e:
-        logging.error(f"Error adding vacation: {e}")
+        logger.error(f"Error adding vacation: {e}")
         sys.exit(1)
 
 
@@ -278,7 +274,7 @@ def delete_vacation(vacation_id):
 
             vacation = cursor.fetchone()
             if not vacation:
-                logging.error(f"Vacation with ID {vacation_id} not found.")
+                logger.error(f"Vacation with ID {vacation_id} not found.")
                 sys.exit(1)
 
             # Delete vacation
@@ -287,15 +283,15 @@ def delete_vacation(vacation_id):
 
             # Check if it was a single day vacation
             if vacation["start_date"] == vacation["end_date"]:
-                logging.info(
+                logger.info(
                     f"Deleted single day vacation for {vacation['mail']} on {vacation['start_date']}"
                 )
             else:
-                logging.info(
+                logger.info(
                     f"Deleted vacation period for {vacation['mail']} from {vacation['start_date']} to {vacation['end_date']}"
                 )
     except sqlite3.Error as e:
-        logging.error(f"Error deleting vacation: {e}")
+        logger.error(f"Error deleting vacation: {e}")
         sys.exit(1)
 
 
@@ -353,8 +349,8 @@ def check_vacation_overlap(
                 )
 
             return False, ""
-    except Exception as e:
-        logging.error(f"Error checking vacation overlap for user {user_id}: {e}")
+    except (sqlite3.Error, OSError) as e:
+        logger.error(f"Error checking vacation overlap for user {user_id}: {e}")
         return True, "Error checking for vacation conflicts. Please try again."
 
 
@@ -394,8 +390,8 @@ def check_duplicate_vacation(
                 )
 
             return False, ""
-    except Exception as e:
-        logging.error(f"Error checking duplicate vacation for user {user_id}: {e}")
+    except (sqlite3.Error, OSError) as e:
+        logger.error(f"Error checking duplicate vacation for user {user_id}: {e}")
         return True, "Error checking for duplicate vacations. Please try again."
 
 

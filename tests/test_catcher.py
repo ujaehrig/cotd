@@ -1,27 +1,28 @@
-"""Tests for catcher.py core functions."""
+"""Tests for cotd.catcher core functions."""
 
-import sqlite3
 import datetime
-import pytest
+import sqlite3
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from catcher import (
-    cleanup_old_vacations,
-    get_tenant_by_name,
-    get_active_tenants,
-    is_user_on_vacation,
-    get_recent_selection_count,
-    calculate_user_weight,
+import pytest
+
+from cotd.catcher import (
     add_tie_breaking_logic,
-    weighted_random_selection_improved,
-    trigger_slack,
-    is_weekend,
-    is_holiday,
-    process_tenant,
+    calculate_user_weight,
+    cleanup_old_vacations,
     find_next_catcher,
+    get_active_tenants,
+    get_recent_selection_count,
+    get_tenant_by_name,
+    is_holiday,
+    is_user_on_vacation,
+    is_weekend,
+    process_tenant,
+    trigger_slack,
+    weighted_random_selection_improved,
 )
-from cleanup import cleanup_old_selection_history
+from cotd.cleanup import cleanup_old_selection_history
 
 
 @pytest.fixture
@@ -91,7 +92,9 @@ def db(tmp_path):
 
 class TestCleanupOldVacations:
     def test_deletes_old_entries(self, db):
-        old_date = (datetime.datetime.now() - datetime.timedelta(days=200)).date().isoformat()
+        old_date = (
+            (datetime.datetime.now() - datetime.timedelta(days=200)).date().isoformat()
+        )
         db.execute(
             "INSERT INTO vacation (user_id, start_date, end_date) VALUES (1, ?, ?)",
             (old_date, old_date),
@@ -102,7 +105,9 @@ class TestCleanupOldVacations:
         assert count == 0
 
     def test_keeps_recent_entries(self, db):
-        recent = (datetime.datetime.now() - datetime.timedelta(days=10)).date().isoformat()
+        recent = (
+            (datetime.datetime.now() - datetime.timedelta(days=10)).date().isoformat()
+        )
         db.execute(
             "INSERT INTO vacation (user_id, start_date, end_date) VALUES (1, ?, ?)",
             (recent, recent),
@@ -113,7 +118,9 @@ class TestCleanupOldVacations:
         assert count == 1
 
     def test_dry_run_does_not_delete(self, db):
-        old_date = (datetime.datetime.now() - datetime.timedelta(days=200)).date().isoformat()
+        old_date = (
+            (datetime.datetime.now() - datetime.timedelta(days=200)).date().isoformat()
+        )
         db.execute(
             "INSERT INTO vacation (user_id, start_date, end_date) VALUES (1, ?, ?)",
             (old_date, old_date),
@@ -245,7 +252,9 @@ class TestCalculateUserWeight:
         assert w == w_normal
 
     def test_weight_always_positive(self):
-        w = calculate_user_weight(1, datetime.date.today().isoformat(), 1, 100, 100, 1, True)
+        w = calculate_user_weight(
+            1, datetime.date.today().isoformat(), 1, 100, 100, 1, True
+        )
         assert w >= 1
 
 
@@ -270,7 +279,11 @@ class TestAddTieBreakingLogic:
 
     def test_never_selected_wins_tie(self):
         users = [
-            {"user": {"mail": "recent@b.com"}, "weight": 100, "last_selected": "2026-03-01"},
+            {
+                "user": {"mail": "recent@b.com"},
+                "weight": 100,
+                "last_selected": "2026-03-01",
+            },
             {"user": {"mail": "never@b.com"}, "weight": 100, "last_selected": None},
         ]
         result = add_tie_breaking_logic(users)
@@ -298,7 +311,9 @@ class TestWeightedRandomSelection:
             {"user": {"mail": "light@b.com"}, "weight": 1},
         ]
         # Run many times — heavy should win almost always
-        results = [weighted_random_selection_improved(users)["mail"] for _ in range(100)]
+        results = [
+            weighted_random_selection_improved(users)["mail"] for _ in range(100)
+        ]
         assert results.count("heavy@b.com") > 80
 
 
@@ -315,27 +330,28 @@ class TestTriggerSlack:
     def test_no_webhook_returns_false(self):
         assert trigger_slack("a@b.com", "") is False
 
-    @patch("catcher.requests.post")
+    @patch("cotd.catcher.requests.post")
     def test_success(self, mock_post):
         mock_post.return_value = MagicMock(status_code=200)
         assert trigger_slack("a@b.com", "https://hook") is True
 
-    @patch("catcher.requests.post")
+    @patch("cotd.catcher.requests.post")
     def test_client_error_no_retry(self, mock_post):
         mock_post.return_value = MagicMock(status_code=400, text="Bad Request")
         assert trigger_slack("a@b.com", "https://hook") is False
         assert mock_post.call_count == 1
 
-    @patch("catcher.requests.post")
-    @patch("catcher.time.sleep")
+    @patch("cotd.catcher.requests.post")
+    @patch("cotd.catcher.time.sleep")
     def test_server_error_retries(self, mock_sleep, mock_post):
         mock_post.return_value = MagicMock(status_code=500)
         assert trigger_slack("a@b.com", "https://hook", max_retries=2) is False
         assert mock_post.call_count == 2
 
-    @patch("catcher.requests.post")
+    @patch("cotd.catcher.requests.post")
     def test_request_exception(self, mock_post):
         import requests as req
+
         mock_post.side_effect = req.exceptions.ConnectionError("fail")
         assert trigger_slack("a@b.com", "https://hook") is False
 
@@ -344,14 +360,14 @@ class TestTriggerSlack:
 
 
 class TestIsWeekend:
-    @patch("catcher.datetime")
+    @patch("cotd.catcher.datetime")
     def test_saturday(self, mock_dt):
         mock_dt.datetime.now.return_value.weekday.return_value = 5
         mock_dt.date = datetime.date
         mock_dt.timedelta = datetime.timedelta
         assert is_weekend() is True
 
-    @patch("catcher.datetime")
+    @patch("cotd.catcher.datetime")
     def test_monday(self, mock_dt):
         mock_dt.datetime.now.return_value.weekday.return_value = 0
         mock_dt.date = datetime.date
@@ -363,20 +379,21 @@ class TestIsWeekend:
 
 
 class TestIsHoliday:
-    @patch("catcher.requests.get")
+    @patch("cotd.catcher.requests.get")
     def test_api_returns_200_is_holiday(self, mock_get):
         mock_get.return_value = MagicMock(status_code=200)
         assert is_holiday("BW") is True
 
-    @patch("catcher.requests.get")
+    @patch("cotd.catcher.requests.get")
     def test_api_returns_204_not_holiday(self, mock_get):
         mock_get.return_value = MagicMock(status_code=204)
         assert is_holiday("BW") is False
 
-    @patch("catcher.holidays.Germany")
-    @patch("catcher.requests.get")
+    @patch("cotd.catcher.holidays.country_holidays")
+    @patch("cotd.catcher.requests.get")
     def test_api_failure_falls_back_to_library(self, mock_get, mock_holidays):
         import requests as req
+
         mock_get.side_effect = req.exceptions.ConnectionError("fail")
         mock_holidays_instance = MagicMock()
         mock_holidays_instance.__contains__ = MagicMock(return_value=False)
@@ -399,26 +416,26 @@ class TestProcessTenant:
             "slack_channel_id": "C12345",
         }
 
-    @patch("catcher.trigger_slack", return_value=True)
-    @patch("catcher.find_next_catcher", return_value=("alice@example.com", True))
-    @patch("catcher.is_holiday", return_value=False)
-    @patch("catcher.is_weekend", return_value=False)
+    @patch("cotd.catcher.trigger_slack", return_value=True)
+    @patch("cotd.catcher.find_next_catcher", return_value=("alice@example.com", True))
+    @patch("cotd.catcher.is_holiday", return_value=False)
+    @patch("cotd.catcher.is_weekend", return_value=False)
     def test_success(self, *mocks):
         db = MagicMock()
         assert process_tenant(db, self._tenant_dict(), dry_run=True) is True
 
-    @patch("catcher.is_weekend", return_value=True)
+    @patch("cotd.catcher.is_weekend", return_value=True)
     def test_weekend_returns_true(self, _):
         db = MagicMock()
         assert process_tenant(db, self._tenant_dict()) is True
 
-    @patch("catcher.is_holiday", return_value=True)
-    @patch("catcher.is_weekend", return_value=False)
+    @patch("cotd.catcher.is_holiday", return_value=True)
+    @patch("cotd.catcher.is_weekend", return_value=False)
     def test_holiday_returns_true(self, *_):
         db = MagicMock()
         assert process_tenant(db, self._tenant_dict()) is True
 
-    @patch("catcher.is_weekend", side_effect=Exception("boom"))
+    @patch("cotd.catcher.is_weekend", side_effect=Exception("boom"))
     def test_exception_returns_false(self, _):
         db = MagicMock()
         assert process_tenant(db, self._tenant_dict()) is False
@@ -434,8 +451,8 @@ class TestFindNextCatcherWeighted:
         db.commit()
 
         with (
-            patch("catcher.is_user_on_vacation", return_value=False),
-            patch("catcher.get_last_working_day_catcher", return_value=None),
+            patch("cotd.catcher.is_user_on_vacation", return_value=False),
+            patch("cotd.catcher.get_last_working_day_catcher", return_value=None),
         ):
             mail, is_new = find_next_catcher(conn=db, tenant_id=1, dry_run=True)
             assert mail in ("alice@example.com", "bob@example.com")

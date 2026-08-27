@@ -1,11 +1,3 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
 """
 Migration: Add UNIQUE constraint on (user_id, ical_event_uid) to vacation table.
 
@@ -13,8 +5,9 @@ Required for the upsert sync strategy introduced alongside this migration.
 SQLite does not support ADD CONSTRAINT, so the table is recreated.
 """
 
-import sqlite3
 import logging
+import sqlite3
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,7 +21,8 @@ logger = logging.getLogger(__name__)
 def migrate_database(db_path: str | None = None) -> None:
     """Add UNIQUE(user_id, ical_event_uid) to vacation table."""
     if db_path is None:
-        from db import DATABASE_PATH
+        from cotd.db import DATABASE_PATH
+
         db_path = DATABASE_PATH
 
     logger.info(f"Starting vacation upsert migration for: {db_path}")

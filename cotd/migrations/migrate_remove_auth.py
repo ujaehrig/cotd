@@ -1,11 +1,3 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# dependencies = [
-#    "python-dotenv>=1.0.0",
-# ]
-# ///
-
 """
 Migration: Remove authentication columns from user table.
 
@@ -18,12 +10,16 @@ The Flask web UI has been removed. These columns are no longer used:
 Requires SQLite 3.35.0+ (ALTER TABLE DROP COLUMN support).
 """
 
-import sqlite3
 import logging
+
+logger = logging.getLogger(__name__)
+import sqlite3
 import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
-from db import DATABASE_PATH
+
+from cotd.db import DATABASE_PATH
 
 load_dotenv()
 
@@ -41,7 +37,7 @@ COLUMNS_TO_DROP = [
 
 def main():
     if not Path(DATABASE_PATH).exists():
-        logging.error(f"Database not found: {DATABASE_PATH}")
+        logger.error(f"Database not found: {DATABASE_PATH}")
         sys.exit(1)
 
     conn = sqlite3.connect(DATABASE_PATH)
@@ -55,19 +51,21 @@ def main():
     for col in COLUMNS_TO_DROP:
         if col in existing:
             assert col.isidentifier(), f"Invalid column name: {col}"
-            logging.info(f"Dropping column: {col}")
+            logger.info(f"Dropping column: {col}")
             cursor.execute(f"ALTER TABLE user DROP COLUMN {col}")
             dropped.append(col)
         else:
-            logging.info(f"Column already absent: {col}")
+            logger.info(f"Column already absent: {col}")
 
     conn.commit()
     conn.close()
 
     if dropped:
-        logging.info(f"Migration complete. Dropped {len(dropped)} column(s): {', '.join(dropped)}")
+        logger.info(
+            f"Migration complete. Dropped {len(dropped)} column(s): {', '.join(dropped)}"
+        )
     else:
-        logging.info("Nothing to migrate — auth columns already removed.")
+        logger.info("Nothing to migrate — auth columns already removed.")
 
 
 if __name__ == "__main__":
