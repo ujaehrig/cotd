@@ -70,7 +70,8 @@ class VacationSync:
         self, 
         tenant_id: int, 
         tenant_name: str,
-        ical_url: str
+        ical_url: str,
+        conn: Optional[sqlite3.Connection] = None
     ) -> Tuple[bool, str]:
         """
         Sync vacations for a single tenant.
@@ -79,13 +80,22 @@ class VacationSync:
             tenant_id: Tenant ID
             tenant_name: Tenant name (for logging)
             ical_url: iCal feed URL
+            conn: Optional existing database connection to reuse. When provided,
+                the caller owns its lifecycle (it is not closed here). When
+                omitted, a connection is opened and closed internally.
 
         Returns:
             Tuple of (success: bool, message: str)
         """
         logger.info(f"Starting vacation sync for tenant '{tenant_name}' (ID: {tenant_id})")
-        
-        conn = sqlite3.connect(self.db_path)
+
+        # Reuse the caller's connection when given. Opening a second connection
+        # to the same SQLite database while the caller holds an (uncommitted)
+        # write deadlocks on WAL's single writer slot and raises
+        # "database is locked" -- so we share the one connection instead.
+        owns_conn = conn is None
+        if owns_conn:
+            conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         try:
@@ -174,7 +184,8 @@ class VacationSync:
             conn.commit()
             return False, error_msg
         finally:
-            conn.close()
+            if owns_conn:
+                conn.close()
 
     def _use_cached_data(
         self, 

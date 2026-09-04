@@ -245,6 +245,119 @@ class TestSyncTenantVacations:
         assert ical == 1
 
 
+class TestSharedConnection:
+    """Regression tests for 'database is locked' from opening a second connection.
+
+    Root cause: catcher.py's process_tenant passes its own long-lived connection
+    around, and that connection can hold an uncommitted write (WAL allows only a
+    single writer). The old sync opened its OWN second connection to write, which
+    could not acquire the writer slot and failed with 'database is locked' --
+    even in WAL mode and regardless of busy_timeout.
+
+    Fix: sync_tenant_vacations accepts an optional ``conn`` and reuses it instead
+    of opening a second connection, so there is only ever one writer.
+    """
+
+    @patch.object(VacationSync, "__init__", lambda self, **kw: None)
+    def _make_sync(self, db_path):
+        s = VacationSync.__new__(VacationSync)
+        s.db_path = db_path
+        s.parser = MagicMock()
+        s.matcher = MagicMock()
+        return s
+
+    def _make_events(self, s):
+        from icalendar import Calendar
+
+        s.parser.fetch_calendar.return_value = Calendar()
+        s.parser.extract_events.return_value = [
+            {
+                "title": "Alice Wonder",
+                "start_date": date(2026, 7, 1),
+                "end_date": date(2026, 7, 5),
+                "uid": "ev1",
+            },
+        ]
+        s.matcher.match_user.return_value = 1  # alice
+
+    def test_reuses_caller_connection_holding_uncommitted_write(self, db_path):
+        """Sync succeeds when the caller's connection holds an uncommitted write.
+
+        Reproduces the production scenario: a WAL database and a caller
+        connection that owns the single writer slot (uncommitted write). If the
+        sync opened its own connection it would deadlock on the writer slot and
+        raise 'database is locked'. By reusing the passed-in connection the write
+        proceeds on the same writer.
+        """
+        s = self._make_sync(db_path)
+        self._make_events(s)
+
+        # Caller connection in WAL mode, holding an UNCOMMITTED write -- this owns
+        # the single WAL writer slot for the duration of the call.
+        caller = sqlite3.connect(db_path)
+        caller.execute("PRAGMA journal_mode=WAL")
+        caller.execute(
+            "INSERT INTO vacation (user_id, start_date, end_date, source) "
+            "VALUES (2, '2026-01-01', '2026-01-02', 'manual')"
+        )
+        # NOTE: deliberately NOT committed here.
+
+        try:
+            success, msg = s.sync_tenant_vacations(
+                1, "Team Alpha", "https://cal.example.com/alpha.ics", conn=caller
+            )
+            caller.commit()
+        finally:
+            caller.close()
+
+        assert success is True, f"sync failed reusing caller connection: {msg}"
+
+        verify = sqlite3.connect(db_path)
+        ical_count = verify.execute(
+            "SELECT COUNT(*) FROM vacation WHERE source = 'ical'"
+        ).fetchone()[0]
+        verify.close()
+        assert ical_count == 1
+
+    def test_does_not_close_caller_connection(self, db_path):
+        """When a connection is injected, the sync must not close it.
+
+        The caller owns the connection lifecycle; the sync only borrows it.
+        """
+        s = self._make_sync(db_path)
+        self._make_events(s)
+
+        caller = sqlite3.connect(db_path)
+        s.sync_tenant_vacations(
+            1, "Team Alpha", "https://cal.example.com/alpha.ics", conn=caller
+        )
+
+        # Connection must still be usable (not closed by the sync).
+        count = caller.execute(
+            "SELECT COUNT(*) FROM vacation WHERE source = 'ical'"
+        ).fetchone()[0]
+        caller.close()
+        assert count == 1
+
+    def test_opens_own_connection_when_none_passed(self, db_path):
+        """Backward compatible: with no conn argument the sync self-manages."""
+        s = self._make_sync(db_path)
+        self._make_events(s)
+
+        success, msg = s.sync_tenant_vacations(
+            1, "Team Alpha", "https://cal.example.com/alpha.ics"
+        )
+        assert success is True
+        assert "1" in msg  # one vacation matched
+
+        verify = sqlite3.connect(db_path)
+        ical_count = verify.execute(
+            "SELECT COUNT(*) FROM vacation WHERE source = 'ical'"
+        ).fetchone()[0]
+        verify.close()
+        assert ical_count == 1
+
+
 class TestUseCachedData:
     def test_with_cached_entries(self, db_path):
         # Insert cached ical vacation

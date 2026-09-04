@@ -234,7 +234,7 @@ def process_tenant(
             try:
                 sync = VacationSync()
                 success, msg = sync.sync_tenant_vacations(
-                    tenant["id"], tenant["name"], tenant["ical_url"]
+                    tenant["id"], tenant["name"], tenant["ical_url"], conn=conn
                 )
                 if success:
                     logger.info(f"[{tenant['name']}] {msg}")
